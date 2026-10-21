@@ -1,0 +1,11 @@
+
+# Кэш Python
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Настройки VS Code
+.vscode/
+
+
+
