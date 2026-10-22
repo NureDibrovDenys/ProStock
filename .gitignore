@@ -1,10 +1,14 @@
-
-# Кэш Python
 **/__pycache__/
 *.pyc
 *.pyo
 
-# Настройки VS Code
+backend/.venv
+backend/venv
+backend/env
+
+backend/core/.env
+
+.idea/
 .vscode/
 
 .env
