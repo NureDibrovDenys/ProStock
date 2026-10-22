@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import bcrypt
 from jose import jwt
 from passlib.context import CryptContext
 
@@ -14,11 +15,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 #хешування пароля
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 #перевірка пароля 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 #генерація jwt токена
 def create_access_token(date: dict, expires_date: timedelta | None = None):
