@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator
-from ..core.enums import (
+from core.core.enums import (
     ObstacleTypeEnum,
     PointTypeEnum,
     ZoneTypeEnum,

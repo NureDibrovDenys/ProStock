@@ -1,5 +1,5 @@
 from django.db import models
-from ..core.enums import RoleNameEnum, UserStatusEnum
+from core.core.enums import RoleNameEnum, UserStatusEnum
 
 class Role(models.Model):
     role_id = models.BigAutoField(primary_key=True)
