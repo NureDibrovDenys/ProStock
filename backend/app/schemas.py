@@ -31,3 +31,14 @@ class WarehouseMapUpdateSchema(BaseModel):
   walls: List[WallSchema] = []
   racks: List[RackSchema] = []
   zones: List[ZoneSchema] = []
+
+
+#схеми для токена та логіну 
+class UserLoginSchema(BaseModel):
+    
+    password: str
+    email:str
+
+class TokenSchema(BaseModel):
+    access_token: str
+    token_type: str
