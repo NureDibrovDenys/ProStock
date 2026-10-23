@@ -1,0 +1,84 @@
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: 64px;
+  padding: 0 24px;
+  background: var(--color-primary);
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-on-primary);
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-on-primary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.active,
+.active:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* На телефоні вкладки переносяться на другий рядок на всю ширину */
+@media (max-width: 720px) {
+  .bar {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    height: auto;
+    padding: 8px 12px;
+  }
+
+  .logo {
+    font-size: 18px;
+  }
+
+  .tabs {
+    order: 3;
+    width: 100%;
+    gap: 4px;
+  }
+
+  .tabs .tab {
+    flex: 1;
+    text-align: center;
+  }
+
+  .tab {
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+}

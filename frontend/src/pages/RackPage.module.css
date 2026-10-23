@@ -1,0 +1,73 @@
+.back {
+  margin-bottom: 24px;
+}
+
+.shelves {
+  margin-top: 40px;
+  padding: 24px 24px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.table th,
+.table td {
+  padding: 14px 24px 14px 0;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+/* Ширини колонок з макета: 160 / 420 / 160 / решта */
+.table th:nth-child(1) {
+  width: 184px;
+}
+
+.table th:nth-child(2) {
+  width: 444px;
+}
+
+.table th:nth-child(3) {
+  width: 184px;
+}
+
+.shelfName {
+  font-weight: 500;
+}
+
+.fill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.percent {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.empty {
+  padding: 24px 0 12px;
+  color: var(--color-muted);
+}

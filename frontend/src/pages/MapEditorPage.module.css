@@ -1,0 +1,357 @@
+/* Конструктор складу — стилі перенесено з прототипу тіммейта */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--map-panel);
+  color: var(--map-ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.loading {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Верхня панель */
+.top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 42px;
+  padding: 0 14px;
+  background: var(--map-pri);
+  color: #fff;
+}
+
+.top b {
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+.subtitle {
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.back {
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.back:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.topActions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.topSave,
+.topGhost {
+  min-height: 30px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.topSave {
+  background: var(--map-acc);
+  color: var(--map-ink);
+}
+
+.topSave:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.topGhost {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Інструменти */
+.tools {
+  flex: none;
+  width: 62px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  overflow-y: auto;
+  background: var(--map-panel);
+  border-right: 1px solid var(--map-line);
+}
+
+.tb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 44px;
+  padding: 6px 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--map-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tb i {
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tb small {
+  font-size: 9.5px;
+  color: var(--map-muted);
+}
+
+.tb:hover {
+  background: var(--map-grid-minor);
+}
+
+.tbOn,
+.tbOn:hover {
+  background: var(--map-acc);
+  color: var(--map-ink);
+}
+
+.tbOn small {
+  color: var(--map-ink);
+}
+
+/* Полотно */
+.cv {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #fff;
+}
+
+.hint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 200px);
+  padding: 5px 9px;
+  border: 1px solid var(--map-line);
+  border-radius: 6px;
+  background: var(--map-panel);
+  color: var(--map-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.emptyTip {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--map-pri);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.banner {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--map-bad);
+  border-radius: 6px;
+  background: #fff5f5;
+  color: var(--map-bad);
+}
+
+.bannerActions {
+  display: flex;
+  gap: 8px;
+}
+
+.bannerActions button {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--map-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--map-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Права панель */
+.panel {
+  flex: none;
+  width: 230px;
+  padding: 12px;
+  overflow-y: auto;
+  background: var(--map-panel);
+  border-left: 1px solid var(--map-line);
+}
+
+.panel h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--map-muted);
+}
+
+.panel .section {
+  margin-top: 18px;
+}
+
+.muted {
+  margin-bottom: 10px;
+  color: var(--map-muted);
+}
+
+.f {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.f input,
+.f select {
+  width: 98px;
+  padding: 5px 6px;
+  border: 1px solid var(--map-line);
+  border-radius: 5px;
+  background: var(--map-bg);
+  color: var(--map-ink);
+  font: inherit;
+}
+
+.btn {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--map-line);
+  border-radius: 6px;
+  background: var(--map-bg);
+  color: var(--map-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btnDanger {
+  border-color: var(--map-bad);
+  color: var(--map-bad);
+}
+
+.btnPreset {
+  margin-top: 4px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.btnPreset small {
+  opacity: 0.75;
+}
+
+.btnOn {
+  background: var(--map-acc);
+  border-color: var(--map-acc);
+  color: var(--map-ink);
+}
+
+.conflict {
+  margin-top: 4px;
+  color: var(--map-bad);
+}
+
+.lg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.lg s {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* Рядок стану */
+.st {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 28px;
+  padding: 0 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--map-panel);
+  border-top: 1px solid var(--map-line);
+  color: var(--map-muted);
+  font-size: 12px;
+}
+
+.bad {
+  color: var(--map-bad);
+  font-weight: 600;
+}
+
+.msg {
+  color: var(--map-ink);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .panel,
+  .subtitle,
+  .top b,
+  .topGhost {
+    display: none;
+  }
+
+  .tools {
+    width: 54px;
+  }
+
+  .hint {
+    display: none;
+  }
+}

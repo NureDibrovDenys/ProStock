@@ -1,0 +1,83 @@
+.scroll {
+  overflow-x: auto;
+  margin-top: 44px;
+}
+
+.plot {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: max-content;
+}
+
+/* Лінія осі X */
+.plot::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 300px;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 56px;
+}
+
+/* 20px під підпис значення + 280px під стовпець */
+.bars {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 300px;
+  padding-top: 20px;
+  width: 100%;
+}
+
+/* Підпис і стовпець не стискаються: при 100% підпис заходить у верхній відступ */
+.value,
+.bar {
+  flex-shrink: 0;
+}
+
+.value {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.bar {
+  display: block;
+  width: 56px;
+  max-height: 280px;
+  border-radius: 6px 6px 0 0;
+  background: var(--color-rack);
+  transition: filter 0.15s ease;
+}
+
+.critical {
+  background: var(--color-danger);
+}
+
+.column:hover .bar {
+  filter: brightness(1.12);
+}
+
+.label {
+  margin-top: 11px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.empty {
+  padding: 48px 0;
+  color: var(--color-muted);
+  text-align: center;
+}
