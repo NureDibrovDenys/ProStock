@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from app.schemas import WarehouseMapUpdateSchema
+from fastapi import APIRouter
+from ..schemas import WarehouseMapUpdateSchema
 
 router = APIRouter(prefix="/api/v1/warehouses", tags=["Warehouse Map"])
 
@@ -10,7 +10,7 @@ fake_database = {}
 def get_warehouse_map(warehouse_id: int):
     #завантаження топології складу з "бази даних"
     if warehouse_id not in fake_database:
-        #якщо карти для цього складу не має, повертаємо порожнюю структуру
+        #якщо карти для цього складу не має, повертаємо порожню структуру
         return {"warehouse_id": warehouse_id, "zones": [], "walls": [], "racks": []}
 
     return fake_database[warehouse_id]
@@ -18,7 +18,7 @@ def get_warehouse_map(warehouse_id: int):
 @router.put("/{warehouse_id}/map")
 def save_warehouse_map(warehouse_id: int, map_data: WarehouseMapUpdateSchema):
     #збереження топології складу в "базу даних"
-    fake_database[warehouse_id] = map_data.dict()  #збереження як словник
+    fake_database[warehouse_id] = map_data.model_dump()  #збереження як словник
     fake_database[warehouse_id]["warehouse_id"] = warehouse_id  #додаємо ідентифікатор складу
 
     return {

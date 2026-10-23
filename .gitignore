@@ -6,7 +6,7 @@ backend/.venv
 backend/venv
 backend/env
 
-backend/core/.env
+backend/.env
 
 .idea/
 .vscode/
