@@ -1,11 +1,13 @@
+from concurrent.interpreters import get_current
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.utils.security import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, hash_password, verify_password
+from app.utils.security import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, hash_password, verify_password, get_current_user
 from app.schemas import TokenSchema, UserLoginSchema
 #роутер для аутентифікації 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+
 
 #тимчасова імітація бд
 FAKE_USER_DB = {
@@ -42,4 +44,9 @@ def login(user_credentials: UserLoginSchema):
         "access_token": acess_token,
         "token_type": "bearer"
     }
-                                              
+
+
+#повертає емейл і роль з перевіреного jwt
+@router.get("/me")
+def current_user(current_user: dict = Depends(get_current_user)):
+    return current_user
