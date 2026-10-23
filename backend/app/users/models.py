@@ -1,47 +1,103 @@
-from django.db import models
-from app.core.enums import RoleNameEnum, UserStatusEnum
+from datetime import datetime
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    func
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship
+)
 
-class Role(models.Model):
-    role_id = models.BigAutoField(primary_key=True)
-    role_name = models.CharField(
-        max_length=50,
-        choices=RoleNameEnum.choices,
+from app.core.enums import RoleName, UserStatus
+
+class Base(DeclarativeBase):
+    pass
+
+class Role(Base):
+    __tablename__ = 'role'
+    
+    id: Mapped[int] = mapped_column(
+        "role_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True
+    )
+    name: Mapped[RoleName] = mapped_column(
+        "role_name",
+        Enum(
+            RoleName,
+            name="role_name",
+            native_enum=False
+        ),
+        nullable=False,
         unique=True
     )
     
-    def __str__(self):
-        return self.role_name
+    users: Mapped[list["User"]] = relationship(back_populates="role")
     
-    class Meta:
-        db_table = 'role'
-        verbose_name = 'Role'
-        verbose_name_plural = 'Roles'
+    def __repr__(self) -> str:
+        return f"Role(id={self.id!r}, name={self.name!r})"
 
-class User(models.Model):
-    user_id = models.BigAutoField(primary_key=True)
-    user_email = models.CharField(
-        max_length=255,
-        unique=True
-    )
-    password_hash = models.CharField(max_length=255)
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
-    role = models.ForeignKey(
-        Role,
-        on_delete=models.RESTRICT,
-        db_column='role_id'
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=UserStatusEnum.choices,
-        default=UserStatusEnum.ACTIVE
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
+class User(Base):
+    __tablename__ = 'user'
     
-    def __str__(self):
-        return f"{self.first_name} {self.last_name} ({self.user_email})"
+    id: Mapped[int] = mapped_column(
+        "user_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True
+    )
+    email: Mapped[str] = mapped_column(
+        "user_email",
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+    password_hash: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False
+    )
+    first_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False
+    )
+    last_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False
+    )
+    role_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "role.role_id",
+            ondelete="RESTRICT"
+        ),
+        nullable=False,
+        index=True
+    )
+    status: Mapped[UserStatus] = mapped_column(
+        Enum(
+            UserStatus,
+            name="user_status",
+            native_enum=False
+        ),
+        nullable=False,
+        default=UserStatus.ACTIVE,
+        server_default=UserStatus.ACTIVE.value,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
     
-    class Meta:
-        db_table = 'user'
-        verbose_name = 'User'
-        verbose_name_plural = 'Users'
+    role: Mapped["Role"] = relationship(back_populates="users")
+    
+    def __repr__(self) -> str:
+        return f"User(id={self.id!r}, email={self.email!r})"
