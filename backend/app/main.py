@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.routers import map as map_router
 from app.routers import auth  as auth_router
 
+
 #екземпляр додатку фастАпі
 app = FastAPI(
     title = "ProStock API",
@@ -13,6 +14,8 @@ app.include_router(map_router.router)
 
 #роутер для автентифікації
 app.include_router(auth_router.router)
+
+
 
 @app.get("/")
 def root():
