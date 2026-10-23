@@ -9,7 +9,7 @@ import { getWarehouseMap, saveWarehouseMap } from '../api/warehouse';
 import { MapLayers } from '../components/map/MapLayers';
 import { ZoomControls } from '../components/map/ZoomControls';
 import mapStyles from '../components/map/map.module.css';
-import { polygonArea, snap, type Point } from '../components/map/geometry';
+import { movePolygonEdge, polygonArea, polygonSignedArea, snap, type Point } from '../components/map/geometry';
 import {
   DEFAULT_NAMES,
   OBSTACLE_TYPES,
@@ -47,7 +47,7 @@ const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
 ];
 
 const HINTS: Record<Tool, string> = {
-  select: 'Клік — вибір · перетягування — переміщення · Q — поворот · Del — видалити',
+  select: 'Клік — вибір · перетягування — переміщення · стіна — зсув по нормалі · Q — поворот · Del — видалити',
   pan: 'Перетягуйте, щоб рухати полотно (також: середня кнопка або Пробіл)',
   wall: 'Клік — вершина контуру · Enter або клік на першу точку — замкнути · Esc — скасувати',
   rack: 'Клік — поставити стелаж за пресетом · потягніть — власний розмір (кількість полиць із пресету)',
@@ -87,6 +87,7 @@ export function MapEditorPage() {
 }
 
 type Draft = { t: ShapeKind; x0: number; y0: number; x1: number; y1: number };
+type WallDrag = { edgeIndex: number; start: Point; initialPoints: Point[]; normal: Point };
 
 function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadError: Error | null; onRetry: () => void }) {
   const queryClient = useQueryClient();
@@ -102,10 +103,12 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const [msg, setMsg] = useState('');
   const [dirty, setDirty] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
+  const [hoveredWall, setHoveredWall] = useState<number | null>(null);
 
   const vp = useViewport();
   const k = vp.viewport.scale;
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const wallDrag = useRef<WallDrag | null>(null);
   const space = useRef(false);
   const msgTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -150,6 +153,25 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const remove = (id: string) => {
     setObjs((os) => os.filter((o) => o.id !== id));
     setSel(null);
+  };
+
+  const beginWallDrag = (edgeIndex: number, start: Point, points: Point[], pointerId: number) => {
+    const edgeStart = points[edgeIndex];
+    const edgeEnd = points[(edgeIndex + 1) % points.length];
+    const dx = edgeEnd[0] - edgeStart[0];
+    const dy = edgeEnd[1] - edgeStart[1];
+    const length = Math.hypot(dx, dy);
+    if (length === 0) return;
+
+    const direction = polygonSignedArea(points) >= 0 ? 1 : -1;
+    wallDrag.current = {
+      edgeIndex,
+      start,
+      initialPoints: points,
+      normal: [(direction * dy) / length, (-direction * dx) / length],
+    };
+    setSel(room?.id ?? null);
+    vp.svgRef.current?.setPointerCapture(pointerId);
   };
 
   useEffect(() => {
@@ -208,6 +230,12 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
     if (tool === 'select') {
       const el = (e.target as Element).closest('[data-id]') as HTMLElement | SVGElement | null;
+      const wallEl = (e.target as Element).closest('[data-wall-index]') as HTMLElement | SVGElement | null;
+      const wallIndex = wallEl ? Number(wallEl.dataset.wallIndex) : NaN;
+      if (room?.t === 'room' && Number.isInteger(wallIndex)) {
+        beginWallDrag(wallIndex, p, room.pts, e.pointerId);
+        return;
+      }
       const id = el?.dataset.id;
       if (!id) {
         // Порожнє місце: зняти виділення й рухати полотно
@@ -247,7 +275,20 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     const p = vp.toWorld(e.clientX, e.clientY);
     const sp: Point = [snap(p[0]), snap(p[1])];
     setCur(sp);
+
+    if (tool === 'select' && !wallDrag.current) {
+      const wall = (e.target as Element).closest('[data-wall-index]') as HTMLElement | SVGElement | null;
+      setHoveredWall(wall ? Number(wall.dataset.wallIndex) : null);
+    }
+
     if (vp.movePan(e)) return;
+    const wall = wallDrag.current;
+    if (wall && room?.t === 'room') {
+      const distance = snap((p[0] - wall.start[0]) * wall.normal[0] + (p[1] - wall.start[1]) * wall.normal[1]);
+      const points = movePolygonEdge(wall.initialPoints, wall.edgeIndex, distance);
+      setObjs((os) => os.map((o) => (o.t === 'room' ? { ...o, pts: points } : o)));
+      return;
+    }
     const d = drag.current;
     if (d) upd(d.id, { x: snap(p[0] + d.dx), y: snap(p[1] + d.dy) });
     else if (draft) setDraft({ ...draft, x1: sp[0], y1: sp[1] });
@@ -256,6 +297,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const up = (e: ReactPointerEvent) => {
     vp.endPan(e);
     drag.current = null;
+    wallDrag.current = null;
     if (!draft) return;
 
     let w = Math.abs(draft.x1 - draft.x0);
@@ -386,9 +428,45 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
             onPointerMove={move}
             onPointerUp={up}
             onPointerCancel={up}
+            onPointerLeave={() => setHoveredWall(null)}
             onContextMenu={(e) => e.preventDefault()}
           >
             <MapLayers objs={objs} viewport={vp.viewport} size={vp.size} selectedId={sel} conflicts={conflicts}>
+              {tool === 'select' && room?.t === 'room' && (
+                <g aria-label="Редагування стін">
+                  {room.pts.map((start, index) => {
+                    const end = room.pts[(index + 1) % room.pts.length];
+                    return (
+                      <g key={index}>
+                        <line
+                          data-wall-index={index}
+                          x1={start[0]}
+                          y1={start[1]}
+                          x2={end[0]}
+                          y2={end[1]}
+                          stroke="transparent"
+                          strokeWidth={sw(1.5)}
+                          strokeLinecap="round"
+                          pointerEvents="stroke"
+                          style={{ cursor: 'move' }}
+                        />
+                        {hoveredWall === index && (
+                          <line
+                            x1={start[0]}
+                            y1={start[1]}
+                            x2={end[0]}
+                            y2={end[1]}
+                            stroke="var(--map-wall-hover)"
+                            strokeWidth={sw(0.2)}
+                            strokeLinecap="round"
+                            pointerEvents="none"
+                          />
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
               {poly.length > 0 && (
                 <g pointerEvents="none">
                   <polyline

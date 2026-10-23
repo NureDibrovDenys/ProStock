@@ -76,6 +76,37 @@ export function polygonArea(p: Point[]): number {
   );
 }
 
+export function polygonSignedArea(p: Point[]): number {
+  return (
+    p.reduce((sum, a, i) => {
+      const b = p[(i + 1) % p.length];
+      return sum + a[0] * b[1] - b[0] * a[1];
+    }, 0) / 2
+  );
+}
+
+/** Зсуває ребро разом із двома його вершинами вздовж зовнішньої нормалі. */
+export function movePolygonEdge(points: Point[], edgeIndex: number, distance: number): Point[] {
+  if (points.length < 3 || edgeIndex < 0 || edgeIndex >= points.length) return points;
+
+  const start = points[edgeIndex];
+  const end = points[(edgeIndex + 1) % points.length];
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return points;
+
+  const orientation = polygonSignedArea(points) >= 0 ? 1 : -1;
+  const normal: Point = [(orientation * dy) / length, (-orientation * dx) / length];
+  const offset: Point = [normal[0] * distance, normal[1] * distance];
+
+  return points.map((point, index) =>
+    index === edgeIndex || index === (edgeIndex + 1) % points.length
+      ? [point[0] + offset[0], point[1] + offset[1]]
+      : point,
+  );
+}
+
 export interface Bounds {
   minX: number;
   minY: number;
