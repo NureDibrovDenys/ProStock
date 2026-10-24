@@ -43,3 +43,16 @@ class PointType(str, Enum):
     INBOUND = "inbound" # Точка прийому
     OUTBOUND = "outbound" # Точка відвантаження
     GENERAL_ENTRY = "general_entry" # Основний вхід
+
+class UnitOfMeasure(str, Enum):
+    PCS = "pcs"
+    KG = "kg"
+    POUND = "pound"
+    BOX = "box"
+    PALLET = "pallet"
+    OTHER = "other"
+
+class SupplierStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    BLOCKED = "blocked"
