@@ -13,7 +13,7 @@ from sqlalchemy import (
     text
 )
 from sqlalchemy.orm import (
-    DeclarativeBase,
+
     Mapped,
     mapped_column,
     relationship,
@@ -27,9 +27,8 @@ from app.core.enums import (
     ShelfStatus,
     InactiveReason,
 )
+from app.core.db import Base
 
-class Base(DeclarativeBase):
-    pass
 
 class Warehouse(Base):
     __tablename__ = "warehouse"

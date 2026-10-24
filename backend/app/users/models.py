@@ -8,16 +8,15 @@ from sqlalchemy import (
     func
 )
 from sqlalchemy.orm import (
-    DeclarativeBase,
+
     Mapped,
     mapped_column,
     relationship
 )
 
 from app.core.enums import RoleName, UserStatus
+from app.core.db import Base
 
-class Base(DeclarativeBase):
-    pass
 
 class Role(Base):
     __tablename__ = 'role'
