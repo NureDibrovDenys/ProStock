@@ -1,44 +1,58 @@
-from django.db import models
+from enum import Enum
 
 # TODO: internationalization (i18n) and localization (i10n)
 #       with gettext() or gettext_lazy(): _()
 
-class RoleNameEnum(models.TextChoices):
-    ROOT = 'root', 'Root'
-    ADMIN = 'administrator', 'Адміністратор'
-    WAREHOUSE_MANAGER = 'warehouse_manager', 'Менеджер складу'
-    WORKER = 'storekeeper', 'Комірник'
+class RoleName(str, Enum):
+    ROOT = "root"
+    ADMIN = "administrator"
+    WAREHOUSE_MANAGER = "warehouse_manager"
+    WORKER = "storekeeper"
+    GUEST = "guest"
 
-class UserStatusEnum(models.TextChoices):
-    ACTIVE = 'active', 'Активний'
-    INACTIVE = 'inactive', 'Неактивний'
-    BLOCKED = 'blocked', 'Заблокований'
+class UserStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    BLOCKED = "blocked"
 
-class ShelfStatusEnum(models.TextChoices):
-    ACTIVE = 'active', 'Активна'
-    OCCUPIED = 'occupied', 'Зайнята'
-    INACTIVE = 'inactive', 'Не функціонує'
+class ShelfStatus(str, Enum):
+    ACTIVE = "active"
+    OCCUPIED = "occupied"
+    INACTIVE = "inactive" # Не функціонує
 
-class InactiveReasonEnum(models.TextChoices):
-    DAMAGED = 'damaged', 'Фізичне пошкодження'
-    MAINTENANCE = 'maintenance', 'Планове технічне обслуговування'
-    STOCKTAKING = 'stocktaking', 'Інвентаризація'
-    QUALITY_CONTROL = 'quality_control', 'Перевірка якості'
-    OTHER = 'other', 'Інша причина'
+class InactiveReason(str, Enum):
+    DAMAGED = "damaged" # Фізичне пошкодження
+    MAINTENANCE = "maintenance" # Планове технічне обслуговування
+    STOCKTAKING = "stocktaking" # Інвентаризація
+    QUALITY_CONTROL = "quality_control" # Перевірка якості
+    OTHER = "other"
 
-class ZoneTypeEnum(models.TextChoices):
-    INBOUND_DOCK = 'inbound_dock', 'Зона приймання'
-    STORAGE_AREA = 'storage_area', 'Зона зберігання'
-    OUTBOUND_DOCK = 'outbound_dock', 'Зона відвантаження'
+class ZoneType(str, Enum):
+    INBOUND_DOCK = "inbound_dock" # Зона приймання
+    STORAGE_AREA = "storage_area" # Зона зберігання
+    OUTBOUND_DOCK = "outbound_dock" # Зона відвантаження
 
-class ObstacleTypeEnum(models.TextChoices):
-    COLUMN = 'column', 'Колона'
-    PILLAR = 'pillar', 'Стовп'
-    NICHE = 'niche', 'Заглиблення'
-    RESTRICTED_ZONE = 'restricted_zone', 'Зона обмеженого доступу'
-    OTHER = 'other', 'Інша перешкода'
+class ObstacleType(str, Enum):
+    COLUMN = "column" # Колона
+    PILLAR = "pillar" # Стовп
+    NICHE = "niche" # Заглиблення
+    RESTRICTED_ZONE = "restricted_zone" # Зона обмеженого доступу
+    OTHER = "other"
 
-class PointTypeEnum(models.TextChoices):
-    INBOUND = 'inbound', 'Точка прийома'
-    OUTBOUND = 'outbound', 'Точка відвантаження'
-    GENERAL_ENTRY = 'general_entry', 'Основний вхід'
+class PointType(str, Enum):
+    INBOUND = "inbound" # Точка прийому
+    OUTBOUND = "outbound" # Точка відвантаження
+    GENERAL_ENTRY = "general_entry" # Основний вхід
+
+class UnitOfMeasure(str, Enum):
+    PCS = "pcs"
+    KG = "kg"
+    POUND = "pound"
+    BOX = "box"
+    PALLET = "pallet"
+    OTHER = "other"
+
+class SupplierStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    BLOCKED = "blocked"
