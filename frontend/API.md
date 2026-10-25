@@ -57,6 +57,9 @@ PUT повністю замінює топологію: об'єкти з `*_id` 
     { "vertex_order": 3, "coord_x": 30, "coord_y": 20 },
     { "vertex_order": 4, "coord_x": 0, "coord_y": 20 }
   ],
+  "partitions": [
+    { "partition_id": 5, "start_x": 15, "start_y": 0, "end_x": 15, "end_y": 12, "thickness": 0.2, "height": null }
+  ],
   "racks": [
     { "rack_id": 7, "rack_code": "R-1", "coord_x": 8, "coord_y": 5, "length": 2.7, "width": 1.1,
       "rotation_angle": 0, "shelves_count": 3 }
@@ -75,7 +78,13 @@ PUT повністю замінює топологію: об'єкти з `*_id` 
 }
 ```
 
-- `walls` — вершини контуру приміщення (модель `WarehouseWalls`), полігон замикається автоматично.
+- `walls` — вершини контуру приміщення (модель `WarehouseWall`), полігон замикається автоматично.
+  Вершини стоять по **внутрішній грані** стіни (площа полігона = корисна площа). Фронт надсилає
+  контур нормалізованим: без самоперетинів, без повторених і колінеарних вершин, знакова площа
+  (формула шнурування за `vertex_order`) додатна. Бекенду варто перевіряти те саме й повертати `422`.
+- `partitions` — внутрішні перегородки: відрізок по осьовій лінії стіни від `start` до `end`,
+  `thickness` — товщина (за замовчуванням 0.2), `height: null` — до стелі. Довжина й кут не
+  передаються — вони обчислюються з координат.
 - `obstacle_type`: `column | pillar | niche | restricted_zone | other`.
 - `zone_type`: `inbound_dock | storage_area | outbound_dock`.
 - `point_type`: `inbound | outbound | general_entry`.
@@ -83,11 +92,23 @@ PUT повністю замінює топологію: об'єкти з `*_id` 
 
 **Що треба змінити на бекенді:**
 1. `app/schemas.py` — `WarehouseMapUpdateSchema` зараз чекає `walls` як відрізки `{x1,y1,x2,y2}`
-   і не має `obstacles` / `entry_points`. Потрібно привести до формату вище.
-2. Модель `Zone` не має `length`, `width`, `rotation_angle` — без них зону не намалювати.
-3. Моделі `WarehouseObstacles` бракує `rotation_angle`.
-4. У `Rack.width/length` вказано `help_text="mm"`, а координати мапи — у метрах.
-   Варто домовитися про одну одиницю для мапи (фронт працює в метрах).
+   і не має `obstacles` / `entry_points` / `partitions`. Потрібно привести до формату вище.
+2. Нова модель `WarehousePartition`:
+   `partition_id` BIGINT PK · `warehouse_id` FK → warehouse (CASCADE, index) ·
+   `start_x`, `start_y`, `end_x`, `end_y` NUMERIC(8,2) not null ·
+   `thickness` NUMERIC(5,2) not null default 0.20, CHECK > 0 ·
+   `height` NUMERIC(8,2) null, CHECK `height IS NULL OR height > 0` ·
+   CHECK ненульова довжина: `start_x <> end_x OR start_y <> end_y`.
+3. `Zone` і `WarehouseObstacle` — бракує `rotation_angle` (у `Rack` уже є).
+4. `Rack` — `UniqueConstraint(warehouse_id, rack_code)` (фронт зіставляє стелажі за кодом);
+   `shelves_count` дублює кількість рядків `Shelf` — краще рахувати.
+5. `Shelf` — додати `level` (номер ярусу знизу, потрібен для FR-5.4 «важке — вниз»);
+   `is_occupied` і статус `occupied` — похідні від розміщеної тари, їх краще не зберігати.
+6. `WarehouseGrid` — не потрібна: крок сітки — налаштування редактора, межі — з контуру.
+7. Одиниці: координати й розміри на мапі — метри; фізичні габарити полиць/товарів/тари — домовитися
+   (зараз `Shelf.total_volume_m3` рахує з мм).
+8. `@validates(...)` у моделях приймає ім'я **атрибута** (`"width"`), а не колонки (`"zone_width"`),
+   інакше валідатор не викликається; для nullable-полів перевіряти `None` перед `<= 0`.
 
 ## GET /warehouses/{id}/racks
 

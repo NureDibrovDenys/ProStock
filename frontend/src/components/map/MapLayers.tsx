@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Viewport } from '../../hooks/useViewport';
-import { isShape, type MapObject, type ShapeObject } from './model';
+import { isPartition, isShape, type MapObject, type PartitionObject, type ShapeObject } from './model';
 
 type MapLayersProps = {
   objs: MapObject[];
@@ -32,6 +32,7 @@ export function MapLayers({
   const sw = (n: number) => n / k; // товщина лінії, стала на екрані
   const room = objs.find((o) => o.t === 'room');
   const shapes = objs.filter(isShape);
+  const partitions = objs.filter(isPartition);
   const view = { x: -tx / k, y: -ty / k, width: size.width / k, height: size.height / k };
 
   return (
@@ -75,6 +76,10 @@ export function MapLayers({
             <polygon points={room.pts.map((p) => p.join(',')).join(' ')} fill="url(#map-g1)" pointerEvents="none" />
           </>
         )}
+
+        {partitions.map((p) => (
+          <Partition key={p.id} p={p} k={k} selected={selectedId === p.id} conflict={conflicts?.has(p.id) ?? false} />
+        ))}
 
         {shapes
           .filter((o) => o.t !== 'entry')
@@ -218,6 +223,23 @@ function Shape({
       >
         {label}
       </text>
+    </g>
+  );
+}
+
+function Partition({ p, k, selected, conflict }: { p: PartitionObject; k: number; selected: boolean; conflict: boolean }) {
+  const line = { x1: p.start[0], y1: p.start[1], x2: p.end[0], y2: p.end[1] };
+  return (
+    <g data-id={p.id}>
+      {/* Невидима широка лінія — щоб тонку перегородку було легко вибрати */}
+      <line {...line} stroke="transparent" strokeWidth={Math.max(p.thickness, 12 / k)} />
+      <line
+        {...line}
+        stroke={conflict ? 'var(--map-bad)' : selected ? 'var(--map-acc)' : 'var(--map-pri)'}
+        strokeWidth={p.thickness}
+        strokeLinecap="square"
+        pointerEvents="none"
+      />
     </g>
   );
 }

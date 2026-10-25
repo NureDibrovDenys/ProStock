@@ -25,11 +25,28 @@ export interface Warehouse {
 // length — розмір уздовж власної осі X об'єкта (до повороту), width — уздовж осі Y.
 // rotation_angle — поворот у градусах за годинниковою стрілкою.
 
-/** Вершина контуру приміщення (WarehouseWalls). */
+/**
+ * Вершина контуру приміщення (WarehouseWall). Вершини — по внутрішній грані стіни,
+ * полігон простий (без самоперетинів), знакова площа за vertex_order додатна.
+ */
 export interface WallVertex {
   vertex_order: number;
   coord_x: number;
   coord_y: number;
+}
+
+/**
+ * Внутрішня перегородка (WarehousePartition) — відрізок по осьовій лінії стіни.
+ * height: null — до стелі.
+ */
+export interface MapPartition {
+  partition_id?: number;
+  start_x: number;
+  start_y: number;
+  end_x: number;
+  end_y: number;
+  thickness: number;
+  height: number | null;
 }
 
 export interface MapRack {
@@ -77,6 +94,7 @@ export interface MapEntryPoint {
 
 export interface WarehouseMap {
   walls: WallVertex[];
+  partitions: MapPartition[];
   racks: MapRack[];
   obstacles: MapObstacle[];
   zones: MapZone[];

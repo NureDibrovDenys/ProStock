@@ -1,6 +1,18 @@
 // Модель об'єктів конструктора та перетворення до/з формату API (WarehouseMap).
 import type { ObstacleType, PointType, WarehouseMap, ZoneType } from '../../api/types';
-import { boundsOf, corners, intersects, pointInPolygon, type Bounds, type Point } from './geometry';
+import {
+  boundsOf,
+  corners,
+  dist,
+  intersects,
+  isSimplePolygon,
+  normalizePolygon,
+  rectInsidePolygon,
+  segmentInsidePolygon,
+  segmentRect,
+  type Bounds,
+  type Point,
+} from './geometry';
 
 export type ShapeKind = 'rack' | 'obst' | 'zin' | 'zstore' | 'zout' | 'entry';
 
@@ -28,9 +40,29 @@ export interface RoomObject {
   pts: Point[];
 }
 
-export type MapObject = ShapeObject | RoomObject;
+/** Внутрішня перегородка: відрізок по осьовій лінії стіни. */
+export interface PartitionObject {
+  id: string;
+  t: 'partition';
+  serverId?: number;
+  start: Point;
+  end: Point;
+  thickness: number;
+  /** null — до стелі. */
+  height: number | null;
+}
 
-export const isShape = (o: MapObject): o is ShapeObject => o.t !== 'room';
+export type MapObject = ShapeObject | RoomObject | PartitionObject;
+
+export const isShape = (o: MapObject): o is ShapeObject => o.t !== 'room' && o.t !== 'partition';
+export const isRoom = (o: MapObject): o is RoomObject => o.t === 'room';
+export const isPartition = (o: MapObject): o is PartitionObject => o.t === 'partition';
+
+export const DEFAULT_PARTITION_THICKNESS = 0.2;
+/** Коротші перегородки вважаються помилкою малювання. */
+export const MIN_PARTITION_LENGTH = 0.1;
+
+export const partitionCorners = (p: PartitionObject) => corners(segmentRect(p.start, p.end, p.thickness));
 
 let counter = 100;
 export const nextId = () => `o${counter++}`;
@@ -86,7 +118,19 @@ export function fromApi(map: WarehouseMap): MapObject[] {
     const pts = [...map.walls]
       .sort((a, b) => a.vertex_order - b.vertex_order)
       .map((v): Point => [Number(v.coord_x), Number(v.coord_y)]);
-    objs.push({ id: nextId(), t: 'room', pts });
+    objs.push({ id: nextId(), t: 'room', pts: normalizePolygon(pts) });
+  }
+  // Відповідь старого бекенду може не містити partitions
+  for (const p of map.partitions ?? []) {
+    objs.push({
+      id: nextId(),
+      t: 'partition',
+      serverId: p.partition_id,
+      start: [Number(p.start_x), Number(p.start_y)],
+      end: [Number(p.end_x), Number(p.end_y)],
+      thickness: Number(p.thickness) || DEFAULT_PARTITION_THICKNESS,
+      height: p.height == null ? null : Number(p.height),
+    });
   }
   for (const r of map.racks) {
     objs.push({
@@ -149,10 +193,22 @@ export function fromApi(map: WarehouseMap): MapObject[] {
 }
 
 export function toApi(objs: MapObject[]): WarehouseMap {
-  const map: WarehouseMap = { walls: [], racks: [], obstacles: [], zones: [], entry_points: [] };
+  const map: WarehouseMap = { walls: [], partitions: [], racks: [], obstacles: [], zones: [], entry_points: [] };
   for (const o of objs) {
     if (o.t === 'room') {
-      map.walls = o.pts.map(([x, y], i) => ({ vertex_order: i + 1, coord_x: r2(x), coord_y: r2(y) }));
+      map.walls = normalizePolygon(o.pts).map(([x, y], i) => ({ vertex_order: i + 1, coord_x: r2(x), coord_y: r2(y) }));
+      continue;
+    }
+    if (o.t === 'partition') {
+      map.partitions.push({
+        partition_id: o.serverId,
+        start_x: r2(o.start[0]),
+        start_y: r2(o.start[1]),
+        end_x: r2(o.end[0]),
+        end_y: r2(o.end[1]),
+        thickness: r2(o.thickness),
+        height: o.height == null ? null : r2(o.height),
+      });
       continue;
     }
     const geo = { coord_x: r2(o.x), coord_y: r2(o.y), length: r2(o.w), width: r2(o.h), rotation_angle: r2(o.a) };
@@ -191,30 +247,56 @@ export function toApi(objs: MapObject[]): WarehouseMap {
   return map;
 }
 
-/** Стелажі, що перетинаються з іншими стелажами / перешкодами або виходять за контур. */
+/**
+ * Конфлікти (попередження, зберегти можна): стелажі, що перетинаються з іншими стелажами,
+ * перешкодами чи перегородками або виходять за контур; перегородки за межами контуру.
+ * Перешкоди на перегородках конфліктом не є — колона в стіні це норма.
+ */
 export function findConflicts(objs: MapObject[]): Set<string> {
   const bad = new Set<string>();
-  const room = objs.find((o): o is RoomObject => o.t === 'room');
+  const room = objs.find(isRoom);
   const shapes = objs.filter(isShape);
   const racks = shapes.filter((o) => o.t === 'rack');
   const blockers = shapes.filter((o) => o.t === 'rack' || o.t === 'obst');
+  const walls = objs.filter(isPartition).map((p) => ({ p, C: partitionCorners(p) }));
   for (const r of racks) {
     const C = corners(r);
-    if (room && !C.every((p) => pointInPolygon(p, room.pts))) bad.add(r.id);
+    if (room && !rectInsidePolygon(C, room.pts)) bad.add(r.id);
     for (const o of blockers) {
       if (o.id !== r.id && intersects(C, corners(o))) {
         bad.add(r.id);
         bad.add(o.id);
       }
     }
+    for (const w of walls) {
+      if (intersects(C, w.C)) {
+        bad.add(r.id);
+        bad.add(w.p.id);
+      }
+    }
   }
+  if (room) for (const { p } of walls) if (!segmentInsidePolygon(p.start, p.end, room.pts)) bad.add(p.id);
   return bad;
+}
+
+/** Помилки геометрії, з якими мапу зберегти не можна. */
+export function validateMap(objs: MapObject[]): string[] {
+  const errors: string[] = [];
+  const room = objs.find(isRoom);
+  if (room && !isSimplePolygon(normalizePolygon(room.pts))) {
+    errors.push('Контур приміщення перетинає сам себе або має менше 3 вершин');
+  }
+  if (objs.some((o) => isPartition(o) && dist(o.start, o.end) < MIN_PARTITION_LENGTH)) {
+    errors.push(`Є перегородка коротша за ${MIN_PARTITION_LENGTH} м`);
+  }
+  return errors;
 }
 
 export function mapBounds(objs: MapObject[]): Bounds | null {
   const pts: Point[] = [];
   for (const o of objs) {
     if (o.t === 'room') pts.push(...o.pts);
+    else if (o.t === 'partition') pts.push(...partitionCorners(o));
     else pts.push(...corners(o));
   }
   return boundsOf(pts);

@@ -6,7 +6,7 @@ import { Button } from '../components/Button';
 import { MapLayers } from '../components/map/MapLayers';
 import { ZoomControls } from '../components/map/ZoomControls';
 import mapStyles from '../components/map/map.module.css';
-import { fromApi, mapBounds, type ShapeObject } from '../components/map/model';
+import { fromApi, isShape, mapBounds, type ShapeObject } from '../components/map/model';
 import { ErrorState, LoadingState, PageHeader } from '../components/ui';
 import { WAREHOUSE_ID } from '../config';
 import { useViewport } from '../hooks/useViewport';
@@ -15,7 +15,7 @@ import { cx } from '../lib/cx';
 import styles from './WarehousePage.module.css';
 
 const LEGEND = [
-  { label: 'Контур приміщення', className: styles.swatchRoom },
+  { label: 'Стіни та перегородки', className: styles.swatchRoom },
   { label: 'Стелаж', className: styles.swatchRack },
   { label: 'Перешкода', className: styles.swatchObstacle },
   { label: 'Зона приймання', className: styles.swatchInbound },
@@ -68,7 +68,7 @@ export function WarehousePage() {
     if (vp.movePan(e)) return;
     const id = idFromEvent(e);
     const obj = objs.find((o) => o.id === id);
-    setHoveredId(obj && obj.t !== 'room' ? obj.id : null);
+    setHoveredId(obj && isShape(obj) ? obj.id : null);
   };
 
   const handlePointerUp = (e: ReactPointerEvent) => {

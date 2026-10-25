@@ -10,6 +10,7 @@ export async function getWarehouseMap(warehouseId: number): Promise<WarehouseMap
   // Порожній склад може прийти без деяких масивів
   return {
     walls: data.walls ?? [],
+    partitions: data.partitions ?? [],
     racks: data.racks ?? [],
     obstacles: data.obstacles ?? [],
     zones: data.zones ?? [],

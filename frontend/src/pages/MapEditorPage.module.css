@@ -86,6 +86,11 @@
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
+.topGhost:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .main {
   flex: 1;
   min-height: 0;
@@ -273,6 +278,11 @@
   cursor: pointer;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .btnDanger {
   border-color: var(--map-bad);
   color: var(--map-bad);
@@ -311,6 +321,12 @@
   width: 14px;
   height: 14px;
   border-radius: 3px;
+}
+
+.lg s.lgWall {
+  height: 4px;
+  border-radius: 0;
+  background: var(--map-pri);
 }
 
 /* Рядок стану */

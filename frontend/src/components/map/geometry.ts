@@ -1,6 +1,23 @@
-// Геометрія мапи: SAT для повернутих прямокутників, точка в полігоні, площа полігона.
+// Геометрія мапи: SAT для повернутих прямокутників, точка в полігоні, площа полігона,
+// перевірка простоти полігона, відрізки (перегородки) та прив'язка точок.
 
 export type Point = [number, number];
+
+const EPS = 1e-9;
+
+export const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+/** Знак повороту a → b відносно o: > 0, < 0 або 0 (на одній прямій). */
+const cross = (o: Point, a: Point, b: Point) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
+const sign = (v: number) => (v > EPS ? 1 : v < -EPS ? -1 : 0);
+
+/** Точка p лежить на відрізку ab (за умови, що всі три на одній прямій). */
+const withinBox = (a: Point, b: Point, p: Point) =>
+  Math.min(a[0], b[0]) - EPS <= p[0] &&
+  p[0] <= Math.max(a[0], b[0]) + EPS &&
+  Math.min(a[1], b[1]) - EPS <= p[1] &&
+  p[1] <= Math.max(a[1], b[1]) + EPS;
 
 export interface OrientedRect {
   x: number; // центр
@@ -105,6 +122,146 @@ export function movePolygonEdge(points: Point[], edgeIndex: number, distance: nu
       ? [point[0] + offset[0], point[1] + offset[1]]
       : point,
   );
+}
+
+/** Відрізки перетинаються «навхрест» — дотик кінцем або накладання не рахуються. */
+export function segmentsCross(p1: Point, p2: Point, q1: Point, q2: Point): boolean {
+  const d1 = sign(cross(q1, q2, p1));
+  const d2 = sign(cross(q1, q2, p2));
+  const d3 = sign(cross(p1, p2, q1));
+  const d4 = sign(cross(p1, p2, q2));
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+
+/** Відрізки мають хоча б одну спільну точку (перетин, дотик або накладання). */
+export function segmentsTouch(p1: Point, p2: Point, q1: Point, q2: Point): boolean {
+  const d1 = sign(cross(q1, q2, p1));
+  const d2 = sign(cross(q1, q2, p2));
+  const d3 = sign(cross(p1, p2, q1));
+  const d4 = sign(cross(p1, p2, q2));
+  if (d1 * d2 < 0 && d3 * d4 < 0) return true;
+  return (
+    (d1 === 0 && withinBox(q1, q2, p1)) ||
+    (d2 === 0 && withinBox(q1, q2, p2)) ||
+    (d3 === 0 && withinBox(p1, p2, q1)) ||
+    (d4 === 0 && withinBox(p1, p2, q2))
+  );
+}
+
+/**
+ * Простий полігон: ≥ 3 вершини, немає нульових ребер і «шпильок» (ребро повертає назад
+ * по собі), несусідні ребра не торкаються одне одного.
+ */
+export function isSimplePolygon(pts: Point[]): boolean {
+  const n = pts.length;
+  if (n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const cur = pts[i];
+    const next = pts[(i + 1) % n];
+    if (dist(cur, next) < EPS) return false;
+    const backwards =
+      sign(cross(prev, cur, next)) === 0 &&
+      (prev[0] - cur[0]) * (next[0] - cur[0]) + (prev[1] - cur[1]) * (next[1] - cur[1]) > 0;
+    if (backwards) return false;
+  }
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const adjacent = j === i + 1 || (i === 0 && j === n - 1);
+      if (adjacent) continue;
+      if (segmentsTouch(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return false;
+    }
+  }
+  return Math.abs(polygonSignedArea(pts)) > EPS;
+}
+
+/**
+ * Канонічний вигляд контуру для збереження: без повторених і колінеарних вершин,
+ * з додатною знаковою площею (однаковий напрям обходу для всіх складів).
+ */
+export function normalizePolygon(pts: Point[]): Point[] {
+  const out = pts.filter((p, i) => dist(p, pts[(i - 1 + pts.length) % pts.length]) > EPS);
+  for (let i = 0; out.length > 3 && i < out.length; ) {
+    const n = out.length;
+    if (sign(cross(out[(i - 1 + n) % n], out[i], out[(i + 1) % n])) === 0) out.splice(i, 1);
+    else i++;
+  }
+  return polygonSignedArea(out) < 0 ? out.reverse() : out;
+}
+
+/** Точка лежить на межі полігона (з допуском tol). */
+export function pointOnPolygonEdge(pt: Point, poly: Point[], tol = 1e-6): boolean {
+  return poly.some((a, i) => distToSegment(pt, a, poly[(i + 1) % poly.length]) <= tol);
+}
+
+/**
+ * Опуклий многокутник (повернутий прямокутник) повністю всередині полігона приміщення.
+ * Вершини на самій стіні допустимі (стелаж впритул до стіни). Окрім вершин перевіряємо
+ * ребра — інакше в непрямокутному приміщенні стелаж «прорізає» внутрішній кут стіни.
+ */
+export function rectInsidePolygon(rect: Point[], poly: Point[]): boolean {
+  const inside = rect.every((p) => pointInPolygon(p, poly) || pointOnPolygonEdge(p, poly));
+  if (!inside) return false;
+  return rect.every((a, i) => {
+    const b = rect[(i + 1) % rect.length];
+    return poly.every((c, j) => !segmentsCross(a, b, c, poly[(j + 1) % poly.length]));
+  });
+}
+
+/**
+ * Відрізок усередині полігона: кінці всередині або на стіні, і жодна стіна його не перетинає.
+ * Кінець, прив'язаний до стіни, після округлення до сантиметра може опинитися на волосину
+ * зовні — тому для перевірки перетину кінці трохи стягуються всередину відрізка.
+ */
+export function segmentInsidePolygon(a: Point, b: Point, poly: Point[], tol = 0.01): boolean {
+  const ok = (p: Point) => pointInPolygon(p, poly) || pointOnPolygonEdge(p, poly, tol);
+  if (!ok(a) || !ok(b)) return false;
+  const len = dist(a, b);
+  const t = len > EPS ? Math.min(0.5, (2 * tol) / len) : 0;
+  const a2: Point = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const b2: Point = [b[0] + (a[0] - b[0]) * t, b[1] + (a[1] - b[1]) * t];
+  if (!pointInPolygon([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], poly)) return false;
+  return poly.every((c, j) => !segmentsCross(a2, b2, c, poly[(j + 1) % poly.length]));
+}
+
+/** Відрізок із товщиною → повернутий прямокутник; кінці подовжено на півтовщини (кути стиків закриті). */
+export function segmentRect(a: Point, b: Point, thickness: number): OrientedRect {
+  return {
+    x: (a[0] + b[0]) / 2,
+    y: (a[1] + b[1]) / 2,
+    w: dist(a, b) + thickness,
+    h: thickness,
+    a: (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI,
+  };
+}
+
+export function closestPointOnSegment(p: Point, a: Point, b: Point): Point {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  if (len2 < EPS) return a;
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+  return [a[0] + t * dx, a[1] + t * dy];
+}
+
+export function distToSegment(p: Point, a: Point, b: Point): number {
+  return dist(p, closestPointOnSegment(p, a, b));
+}
+
+/** Напрямок from → to прив'язується до кута, кратного stepDeg, довжина — до кроку сітки. */
+export function snapAngle(from: Point, to: Point, stepDeg: number): Point {
+  const step = (stepDeg * Math.PI) / 180;
+  const angle = Math.round(Math.atan2(to[1] - from[1], to[0] - from[0]) / step) * step;
+  const len = snap(dist(from, to));
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return [round(from[0] + Math.cos(angle) * len), round(from[1] + Math.sin(angle) * len)];
+}
+
+/** Точку b посунути вздовж напрямку a → b так, щоб довжина відрізка стала len. */
+export function withLength(a: Point, b: Point, len: number): Point {
+  const d = dist(a, b);
+  if (d < EPS) return [a[0] + len, a[1]];
+  return [a[0] + ((b[0] - a[0]) / d) * len, a[1] + ((b[1] - a[1]) / d) * len];
 }
 
 export interface Bounds {

@@ -1,6 +1,7 @@
 // Конструктор складу (2D-мапа). Перенесено з прототипу тіммейта на React + TypeScript:
-// контур приміщення полігоном, стелажі з поворотом і пресетами, перешкоди, зони, точки входу,
-// перевірка колізій і виходу за контур. Збереження — PUT /warehouses/{id}/map.
+// контур приміщення полігоном (з редагуванням вершин), внутрішні перегородки, стелажі з поворотом
+// і пресетами, перешкоди, зони, точки входу, перевірка колізій і виходу за контур, undo/redo.
+// Збереження — PUT /warehouses/{id}/map.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
@@ -9,19 +10,37 @@ import { getWarehouseMap, saveWarehouseMap } from '../api/warehouse';
 import { MapLayers } from '../components/map/MapLayers';
 import { ZoomControls } from '../components/map/ZoomControls';
 import mapStyles from '../components/map/map.module.css';
-import { movePolygonEdge, polygonArea, polygonSignedArea, snap, type Point } from '../components/map/geometry';
+import {
+  closestPointOnSegment,
+  dist,
+  isSimplePolygon,
+  movePolygonEdge,
+  polygonArea,
+  polygonSignedArea,
+  segmentsTouch,
+  snap,
+  snapAngle,
+  withLength,
+  type Point,
+} from '../components/map/geometry';
 import {
   DEFAULT_NAMES,
+  DEFAULT_PARTITION_THICKNESS,
+  MIN_PARTITION_LENGTH,
   OBSTACLE_TYPES,
   POINT_TYPES,
   RACK_PRESETS,
   findConflicts,
   fromApi,
+  isPartition,
+  isRoom,
   isShape,
   mapBounds,
   nextId,
   toApi,
+  validateMap,
   type MapObject,
+  type PartitionObject,
   type ShapeKind,
   type ShapeObject,
 } from '../components/map/model';
@@ -32,12 +51,13 @@ import { useWarehouseName } from '../hooks/useWarehouse';
 import { cx } from '../lib/cx';
 import styles from './MapEditorPage.module.css';
 
-type Tool = 'select' | 'pan' | 'wall' | ShapeKind;
+type Tool = 'select' | 'pan' | 'wall' | 'partition' | ShapeKind;
 
 const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
   { id: 'select', key: 'V', name: 'Вибір', icon: '↖' },
   { id: 'pan', key: 'H', name: 'Рука', icon: '✥' },
   { id: 'wall', key: 'W', name: 'Контур', icon: '⬡' },
+  { id: 'partition', key: 'P', name: 'Перегор.', icon: '┃' },
   { id: 'rack', key: 'R', name: 'Стелаж', icon: '▤' },
   { id: 'obst', key: 'O', name: 'Перешкода', icon: '▧' },
   { id: 'zin', key: 'I', name: 'Прийман.', icon: '⇩' },
@@ -47,9 +67,11 @@ const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
 ];
 
 const HINTS: Record<Tool, string> = {
-  select: 'Клік — вибір · перетягування — переміщення · стіна — зсув по нормалі · Q — поворот · Del — видалити',
+  select:
+    'Клік — вибір · перетягування — переміщення · контур: тягніть вершину, «+» — нова вершина, ребро — зсув · Q — поворот · Del — видалити · Ctrl+Z — скасувати',
   pan: 'Перетягуйте, щоб рухати полотно (також: середня кнопка або Пробіл)',
-  wall: 'Клік — вершина контуру · Enter або клік на першу точку — замкнути · Esc — скасувати',
+  wall: 'Клік — вершина контуру · Shift — кут 45°/90° · Backspace — прибрати останню · Enter або клік на першу точку — замкнути · Esc — скасувати',
+  partition: 'Клік — початок, клік — кінець (далі ланцюжком) · прив’язка до стін і вершин · Shift — кут 45°/90° · Enter — новий ланцюжок · Esc — вийти',
   rack: 'Клік — поставити стелаж за пресетом · потягніть — власний розмір (кількість полиць із пресету)',
   obst: 'Затисніть і потягніть, щоб додати перешкоду (колона, ніша, техзона)',
   zin: 'Затисніть і потягніть, щоб задати зону приймання',
@@ -60,6 +82,12 @@ const HINTS: Record<Tool, string> = {
 
 /** Масштаб, що відповідає 100% (пікселів на метр). */
 const BASE_SCALE = 22;
+/** Радіус прив'язки до вершин і стін, пікселі екрана. */
+const MAGNET_PX = 10;
+/** Скільки кроків зберігає undo. */
+const HISTORY_LIMIT = 100;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function MapEditorPage() {
   const query = useQuery({
@@ -88,6 +116,13 @@ export function MapEditorPage() {
 
 type Draft = { t: ShapeKind; x0: number; y0: number; x1: number; y1: number };
 type WallDrag = { edgeIndex: number; start: Point; initialPoints: Point[]; normal: Point };
+type PartitionDrag =
+  | { id: string; mode: 'move'; origin: Point; start0: Point; end0: Point }
+  | { id: string; mode: 'start' | 'end' };
+/** record — окремий крок історії; drag — один крок на весь жест перетягування. */
+type HistoryMode = 'record' | 'drag';
+/** Що не враховувати під час прив'язки (сам об'єкт, який зараз тягнуть). */
+type MagnetExclude = { roomVertex?: number; partitionId?: string };
 
 function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadError: Error | null; onRetry: () => void }) {
   const queryClient = useQueryClient();
@@ -96,7 +131,9 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const [objs, setObjsRaw] = useState<MapObject[]>(initial);
   const [tool, setTool] = useState<Tool>('select');
   const [sel, setSel] = useState<string | null>(null);
+  const [selVertex, setSelVertex] = useState<number | null>(null);
   const [poly, setPoly] = useState<Point[]>([]);
+  const [chainStart, setChainStart] = useState<Point | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [cur, setCur] = useState<Point>([0, 0]);
   const [preset, setPreset] = useState(1);
@@ -109,15 +146,54 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const k = vp.viewport.scale;
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const wallDrag = useRef<WallDrag | null>(null);
+  const vertexDrag = useRef<number | null>(null);
+  const partDrag = useRef<PartitionDrag | null>(null);
   const space = useRef(false);
   const msgTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Актуальний стан для глобальних слухачів клавіатури
-  const S = useRef({ tool, sel, poly });
-  S.current = { tool, sel, poly };
+  // Історія для undo/redo: знімки масиву об'єктів (вони незмінні, тож копіювати не треба)
+  const past = useRef<MapObject[][]>([]);
+  const future = useRef<MapObject[][]>([]);
+  const pendingCheckpoint = useRef(false);
+  const objsRef = useRef(objs);
+  objsRef.current = objs;
 
-  const setObjs = (updater: (prev: MapObject[]) => MapObject[]) => {
+  const room = objs.find(isRoom);
+  const activeVertex =
+    room && sel === room.id && selVertex !== null && selVertex < room.pts.length ? selVertex : null;
+
+  // Актуальний стан для глобальних слухачів клавіатури
+  const S = useRef({ tool, sel, poly, chainStart, vertex: activeVertex });
+  S.current = { tool, sel, poly, chainStart, vertex: activeVertex };
+
+  const pushHistory = () => {
+    past.current.push(objsRef.current);
+    if (past.current.length > HISTORY_LIMIT) past.current.shift();
+    future.current = [];
+  };
+
+  const setObjs = (updater: (prev: MapObject[]) => MapObject[], mode: HistoryMode = 'record') => {
+    if (mode === 'record' || pendingCheckpoint.current) {
+      pushHistory();
+      pendingCheckpoint.current = false;
+    }
     setObjsRaw(updater);
+    setDirty(true);
+  };
+
+  const undo = () => {
+    const prev = past.current.pop();
+    if (!prev) return;
+    future.current.push(objsRef.current);
+    setObjsRaw(prev);
+    setDirty(true);
+  };
+
+  const redo = () => {
+    const next = future.current.pop();
+    if (!next) return;
+    past.current.push(objsRef.current);
+    setObjsRaw(next);
     setDirty(true);
   };
 
@@ -136,23 +212,155 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const pick = (t: Tool) => {
     setTool(t);
     setPoly([]);
+    setChainStart(null);
     setDraft(null);
   };
 
   const closePoly = () => {
     const p = S.current.poly;
     if (p.length < 3) return;
+    if (!isSimplePolygon(p)) return flash('Стіни контуру не можуть перетинатися');
     setObjs((os) => [...os.filter((o) => o.t !== 'room'), { id: nextId(), t: 'room', pts: p }]);
     setPoly([]);
     setTool('select');
   };
 
-  const upd = (id: string, patch: Partial<ShapeObject>) =>
-    setObjs((os) => os.map((o) => (o.id === id && isShape(o) ? { ...o, ...patch } : o)));
+  const upd = (id: string, patch: Partial<ShapeObject>, mode: HistoryMode = 'record') =>
+    setObjs((os) => os.map((o) => (o.id === id && isShape(o) ? { ...o, ...patch } : o)), mode);
+
+  const updPartition = (id: string, patch: Partial<PartitionObject>, mode: HistoryMode = 'record') =>
+    setObjs((os) => os.map((o) => (o.id === id && isPartition(o) ? { ...o, ...patch } : o)), mode);
+
+  /** Змінює контур, лише якщо результат — простий полігон (без самоперетинів). */
+  const tryRoomPts = (pts: Point[], mode: HistoryMode = 'record', error?: string) => {
+    if (!isSimplePolygon(pts)) {
+      if (error) flash(error);
+      return false;
+    }
+    setObjs((os) => os.map((o) => (isRoom(o) ? { ...o, pts } : o)), mode);
+    return true;
+  };
 
   const remove = (id: string) => {
     setObjs((os) => os.filter((o) => o.id !== id));
     setSel(null);
+    setSelVertex(null);
+  };
+
+  const removeVertex = (index: number) => {
+    const r = objsRef.current.find(isRoom);
+    if (!r) return;
+    if (r.pts.length <= 3) return flash('У контурі має бути щонайменше 3 вершини');
+    const pts = r.pts.filter((_, i) => i !== index);
+    if (tryRoomPts(pts, 'record', 'Без цієї вершини контур перетне сам себе')) setSelVertex(null);
+  };
+
+  const setEdgeLength = (index: number, len: number) => {
+    if (!room || len < MIN_PARTITION_LENGTH) return;
+    const next = (index + 1) % room.pts.length;
+    const end = withLength(room.pts[index], room.pts[next], len);
+    tryRoomPts(
+      room.pts.map((v, i) => (i === next ? end : v)),
+      'record',
+      'З такою довжиною стіни контур перетне сам себе',
+    );
+  };
+
+  const setVertex = (index: number, p: Point) => {
+    if (!room) return;
+    tryRoomPts(
+      room.pts.map((v, i) => (i === index ? p : v)),
+      'record',
+      'Вершина в цьому місці перетне контур',
+    );
+  };
+
+  // ── Прив'язка ────────────────────────────────────────────────────────────
+
+  const magnetVertices = (ex: MagnetExclude): Point[] => {
+    const out: Point[] = [...poly];
+    room?.pts.forEach((p, i) => {
+      if (i !== ex.roomVertex) out.push(p);
+    });
+    for (const o of objs) if (isPartition(o) && o.id !== ex.partitionId) out.push(o.start, o.end);
+    return out;
+  };
+
+  const magnetEdges = (ex: MagnetExclude): Array<[Point, Point]> => {
+    const out: Array<[Point, Point]> = [];
+    room?.pts.forEach((a, i) => out.push([a, room.pts[(i + 1) % room.pts.length]]));
+    for (const o of objs) if (isPartition(o) && o.id !== ex.partitionId) out.push([o.start, o.end]);
+    return out;
+  };
+
+  /**
+   * Пріоритет: вершини та кінці перегородок → кут від попередньої точки (Shift) → стіни →
+   * вирівнювання по осях з вершинами → сітка.
+   */
+  const snapPoint = (
+    raw: Point,
+    opts: { from?: Point | null; ortho?: boolean; edges?: boolean; align?: boolean; ex?: MagnetExclude } = {},
+  ): Point => {
+    const ex = opts.ex ?? {};
+    let best: Point | null = null;
+    let bestDist = MAGNET_PX / k;
+    for (const v of magnetVertices(ex)) {
+      const d = dist(v, raw);
+      if (d < bestDist) {
+        best = v;
+        bestDist = d;
+      }
+    }
+    if (best) return best;
+    if (opts.ortho && opts.from) return snapAngle(opts.from, raw, 45);
+    if (opts.edges) {
+      for (const [a, b] of magnetEdges(ex)) {
+        const c = closestPointOnSegment(raw, a, b);
+        const d = dist(c, raw);
+        if (d < bestDist) {
+          best = c;
+          bestDist = d;
+        }
+      }
+      if (best) return best;
+    }
+    if (opts.align) {
+      // Кожна вісь окремо: x/y притягується до найближчої вершини, що лежить на тій самій вертикалі/горизонталі
+      const aligned: [number | null, number | null] = [null, null];
+      for (const axis of [0, 1] as const) {
+        let bestAxis = MAGNET_PX / k;
+        for (const v of magnetVertices(ex)) {
+          const d = Math.abs(v[axis] - raw[axis]);
+          if (d < bestAxis) {
+            aligned[axis] = v[axis];
+            bestAxis = d;
+          }
+        }
+      }
+      return [aligned[0] ?? snap(raw[0]), aligned[1] ?? snap(raw[1])];
+    }
+    return [snap(raw[0]), snap(raw[1])];
+  };
+
+  /** Пунктирні напрямні від найближчих вершин, з якими точка лежить на одній вертикалі/горизонталі. */
+  const alignGuides = (p: Point): Array<[Point, Point]> => {
+    const out: Array<[Point, Point]> = [];
+    for (const axis of [0, 1] as const) {
+      let near: Point | null = null;
+      for (const v of magnetVertices({})) {
+        if (Math.abs(v[axis] - p[axis]) > 1e-6 || dist(v, p) < 1e-6) continue;
+        if (!near || dist(v, p) < dist(near, p)) near = v;
+      }
+      if (near) out.push([near, p]);
+    }
+    return out;
+  };
+
+  /** Точка під курсором з урахуванням прив'язки поточного інструмента. */
+  const toolPoint = (raw: Point, shift: boolean): Point => {
+    if (tool === 'wall') return snapPoint(raw, { from: poly[poly.length - 1], ortho: shift, align: true });
+    if (tool === 'partition') return snapPoint(raw, { from: chainStart, ortho: shift, edges: true, align: true });
+    return [snap(raw[0]), snap(raw[1])];
   };
 
   const beginWallDrag = (edgeIndex: number, start: Point, points: Point[], pointerId: number) => {
@@ -170,7 +378,9 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       initialPoints: points,
       normal: [(direction * dy) / length, (-direction * dx) / length],
     };
+    pendingCheckpoint.current = true;
     setSel(room?.id ?? null);
+    setSelVertex(null);
     vp.svgRef.current?.setPointerCapture(pointerId);
   };
 
@@ -179,16 +389,36 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       if (/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) return;
       const s = S.current;
       const key = e.key;
+      // e.code — щоб Ctrl+Z працював і в українській розкладці
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) {
+        e.preventDefault();
+        return e.code === 'KeyY' || e.shiftKey ? redo() : undo();
+      }
       if (key === ' ') {
         space.current = true;
         e.preventDefault();
         return;
       }
       if (key === 'Escape') return pick('select');
-      if (key === 'Enter') return closePoly();
-      if ((key === 'Delete' || key === 'Backspace') && s.sel) {
-        e.preventDefault();
-        return remove(s.sel);
+      if (key === 'Enter') return s.tool === 'partition' ? setChainStart(null) : closePoly();
+      if (key === 'Delete' || key === 'Backspace') {
+        if (s.tool === 'wall' && s.poly.length) {
+          e.preventDefault();
+          return setPoly((p) => p.slice(0, -1));
+        }
+        if (s.tool === 'partition' && s.chainStart) {
+          e.preventDefault();
+          return setChainStart(null);
+        }
+        if (s.vertex !== null) {
+          e.preventDefault();
+          return removeVertex(s.vertex);
+        }
+        if (s.sel) {
+          e.preventDefault();
+          return remove(s.sel);
+        }
+        return;
       }
       const lower = key.toLowerCase();
       if (lower === 'q' && s.sel) {
@@ -224,19 +454,47 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const down = (e: ReactPointerEvent) => {
     if (e.button === 2) return;
     const p = vp.toWorld(e.clientX, e.clientY);
-    const sp: Point = [snap(p[0]), snap(p[1])];
 
     if (e.button === 1 || tool === 'pan' || space.current) return vp.startPan(e);
 
+    const sp = toolPoint(p, e.shiftKey);
+    const target = e.target as Element;
+    const capture = () => vp.svgRef.current?.setPointerCapture(e.pointerId);
+
     if (tool === 'select') {
-      const el = (e.target as Element).closest('[data-id]') as HTMLElement | SVGElement | null;
-      const wallEl = (e.target as Element).closest('[data-wall-index]') as HTMLElement | SVGElement | null;
+      // Ручки редагування: вершини контуру, «+» на ребрі, кінці перегородки
+      const handle = target.closest('[data-handle]') as HTMLElement | SVGElement | null;
+      if (handle) {
+        const kind = handle.dataset.handle;
+        const index = Number(handle.dataset.index);
+        pendingCheckpoint.current = true;
+        if (kind === 'vertex' && room) {
+          setSelVertex(index);
+          vertexDrag.current = index;
+        } else if (kind === 'insert' && room) {
+          const a = room.pts[index];
+          const b = room.pts[(index + 1) % room.pts.length];
+          const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          tryRoomPts([...room.pts.slice(0, index + 1), mid, ...room.pts.slice(index + 1)], 'drag');
+          setSelVertex(index + 1);
+          vertexDrag.current = index + 1;
+        } else if ((kind === 'start' || kind === 'end') && handle.dataset.part) {
+          partDrag.current = { id: handle.dataset.part, mode: kind };
+        }
+        capture();
+        return;
+      }
+
+      const wallEl = target.closest('[data-wall-index]') as HTMLElement | SVGElement | null;
       const wallIndex = wallEl ? Number(wallEl.dataset.wallIndex) : NaN;
-      if (room?.t === 'room' && Number.isInteger(wallIndex)) {
+      if (room && Number.isInteger(wallIndex)) {
         beginWallDrag(wallIndex, p, room.pts, e.pointerId);
         return;
       }
+
+      const el = target.closest('[data-id]') as HTMLElement | SVGElement | null;
       const id = el?.dataset.id;
+      setSelVertex(null);
       if (!id) {
         // Порожнє місце: зняти виділення й рухати полотно
         setSel(null);
@@ -246,14 +504,37 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       const o = objs.find((x) => x.id === id);
       if (o && isShape(o)) {
         drag.current = { id, dx: o.x - p[0], dy: o.y - p[1] };
-        vp.svgRef.current?.setPointerCapture(e.pointerId);
+        pendingCheckpoint.current = true;
+        capture();
+      } else if (o && isPartition(o)) {
+        partDrag.current = { id, mode: 'move', origin: p, start0: o.start, end0: o.end };
+        pendingCheckpoint.current = true;
+        capture();
       }
       return;
     }
 
     if (tool === 'wall') {
-      if (poly.length > 2 && Math.hypot(sp[0] - poly[0][0], sp[1] - poly[0][1]) < 0.01) closePoly();
-      else setPoly([...poly, sp]);
+      const last = poly[poly.length - 1];
+      if (poly.length > 2 && dist(sp, poly[0]) < 1e-6) return closePoly();
+      if (last && dist(sp, last) < 1e-6) return;
+      // Новий відрізок не може зачіпати попередні (крім сусіднього, з яким має спільну вершину)
+      if (last && poly.slice(0, -2).some((a, i) => segmentsTouch(a, poly[i + 1], last, sp))) {
+        return flash('Стіни контуру не можуть перетинатися');
+      }
+      setPoly([...poly, sp]);
+      return;
+    }
+
+    if (tool === 'partition') {
+      if (!chainStart) return setChainStart(sp);
+      if (dist(chainStart, sp) < MIN_PARTITION_LENGTH) return;
+      const id = nextId();
+      setObjs((os) => [
+        ...os,
+        { id, t: 'partition', start: chainStart, end: sp, thickness: DEFAULT_PARTITION_THICKNESS, height: null },
+      ]);
+      setChainStart(sp);
       return;
     }
 
@@ -268,12 +549,12 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     }
 
     setDraft({ t: tool, x0: sp[0], y0: sp[1], x1: sp[0], y1: sp[1] });
-    vp.svgRef.current?.setPointerCapture(e.pointerId);
+    capture();
   };
 
   const move = (e: ReactPointerEvent) => {
     const p = vp.toWorld(e.clientX, e.clientY);
-    const sp: Point = [snap(p[0]), snap(p[1])];
+    const sp = toolPoint(p, e.shiftKey);
     setCur(sp);
 
     if (tool === 'select' && !wallDrag.current) {
@@ -282,22 +563,62 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     }
 
     if (vp.movePan(e)) return;
+
     const wall = wallDrag.current;
-    if (wall && room?.t === 'room') {
+    if (wall && room) {
       const distance = snap((p[0] - wall.start[0]) * wall.normal[0] + (p[1] - wall.start[1]) * wall.normal[1]);
-      const points = movePolygonEdge(wall.initialPoints, wall.edgeIndex, distance);
-      setObjs((os) => os.map((o) => (o.t === 'room' ? { ...o, pts: points } : o)));
+      // Крок, після якого контур перетне сам себе, просто не застосовується
+      tryRoomPts(movePolygonEdge(wall.initialPoints, wall.edgeIndex, distance), 'drag');
       return;
     }
+
+    const vi = vertexDrag.current;
+    if (vi !== null && room) {
+      const prev = room.pts[(vi - 1 + room.pts.length) % room.pts.length];
+      const q = snapPoint(p, { from: prev, ortho: e.shiftKey, align: true, ex: { roomVertex: vi } });
+      if (dist(q, room.pts[vi]) > 1e-9) tryRoomPts(room.pts.map((v, i) => (i === vi ? q : v)), 'drag');
+      setCur(q);
+      return;
+    }
+
+    const pd = partDrag.current;
+    if (pd) {
+      const part = objs.find((o) => o.id === pd.id);
+      if (!part || !isPartition(part)) return;
+      if (pd.mode === 'move') {
+        const dx = snap(p[0] - pd.origin[0]);
+        const dy = snap(p[1] - pd.origin[1]);
+        if (dist([pd.start0[0] + dx, pd.start0[1] + dy], part.start) < 1e-9) return;
+        updPartition(
+          pd.id,
+          { start: [pd.start0[0] + dx, pd.start0[1] + dy], end: [pd.end0[0] + dx, pd.end0[1] + dy] },
+          'drag',
+        );
+      } else {
+        const other = pd.mode === 'start' ? part.end : part.start;
+        const q = snapPoint(p, { from: other, ortho: e.shiftKey, edges: true, align: true, ex: { partitionId: pd.id } });
+        if (dist(q, other) >= MIN_PARTITION_LENGTH) updPartition(pd.id, pd.mode === 'start' ? { start: q } : { end: q }, 'drag');
+        setCur(q);
+      }
+      return;
+    }
+
     const d = drag.current;
-    if (d) upd(d.id, { x: snap(p[0] + d.dx), y: snap(p[1] + d.dy) });
-    else if (draft) setDraft({ ...draft, x1: sp[0], y1: sp[1] });
+    if (d) {
+      const o = objs.find((x) => x.id === d.id);
+      const x = snap(p[0] + d.dx);
+      const y = snap(p[1] + d.dy);
+      if (o && isShape(o) && (o.x !== x || o.y !== y)) upd(d.id, { x, y }, 'drag');
+    } else if (draft) setDraft({ ...draft, x1: sp[0], y1: sp[1] });
   };
 
   const up = (e: ReactPointerEvent) => {
     vp.endPan(e);
     drag.current = null;
     wallDrag.current = null;
+    vertexDrag.current = null;
+    partDrag.current = null;
+    pendingCheckpoint.current = false;
     if (!draft) return;
 
     let w = Math.abs(draft.x1 - draft.x0);
@@ -332,7 +653,6 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   // ── Збереження ───────────────────────────────────────────────────────────
 
   const conflicts = useMemo(() => findConflicts(objs), [objs]);
-  const room = objs.find((o) => o.t === 'room');
   const selected = objs.find((o) => o.id === sel) ?? null;
   const racksCount = objs.filter((o) => o.t === 'rack').length;
 
@@ -349,6 +669,8 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   });
 
   const save = () => {
+    const errors = validateMap(objs);
+    if (errors.length) return flash(errors.join(' · '));
     const codes = objs.filter((o): o is ShapeObject => o.t === 'rack').map((o) => o.name.trim());
     if (codes.some((c) => !c)) return flash('У кожного стелажа має бути назва (код)');
     if (new Set(codes).size !== codes.length) return flash('Назви стелажів повторюються');
@@ -384,6 +706,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const sw = (n: number) => n / k;
   const P = RACK_PRESETS[preset];
   const cursor = tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+  const roomDirection = room && polygonSignedArea(room.pts) >= 0 ? 1 : -1;
 
   return (
     <div className={styles.app}>
@@ -394,6 +717,26 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
         <b>ProStock</b>
         <span className={styles.subtitle}>Конструктор складу · {warehouseName}</span>
         <div className={styles.topActions}>
+          <button
+            type="button"
+            className={styles.topGhost}
+            onClick={undo}
+            disabled={!past.current.length}
+            title="Скасувати (Ctrl+Z)"
+            aria-label="Скасувати"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            className={styles.topGhost}
+            onClick={redo}
+            disabled={!future.current.length}
+            title="Повторити (Ctrl+Shift+Z)"
+            aria-label="Повторити"
+          >
+            ↷
+          </button>
           <button type="button" className={styles.topGhost} onClick={exportJson}>
             Експорт JSON
           </button>
@@ -432,7 +775,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
             onContextMenu={(e) => e.preventDefault()}
           >
             <MapLayers objs={objs} viewport={vp.viewport} size={vp.size} selectedId={sel} conflicts={conflicts}>
-              {tool === 'select' && room?.t === 'room' && (
+              {tool === 'select' && room && (
                 <g aria-label="Редагування стін">
                   {room.pts.map((start, index) => {
                     const end = room.pts[(index + 1) % room.pts.length];
@@ -467,6 +810,107 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
                   })}
                 </g>
               )}
+              {tool === 'select' && room && sel === room.id && (
+                <g aria-label="Вершини контуру">
+                  {room.pts.map((a, i) => {
+                    const b = room.pts[(i + 1) % room.pts.length];
+                    const len = dist(a, b);
+                    const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+                    // Підпис довжини — із зовнішнього боку стіни
+                    const off = 14 / k / (len || 1);
+                    const lx = mid[0] + roomDirection * (b[1] - a[1]) * off;
+                    const ly = mid[1] - roomDirection * (b[0] - a[0]) * off;
+                    return (
+                      <g key={`e${i}`}>
+                        <text
+                          x={lx}
+                          y={ly}
+                          fontSize={11 / k}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fill="var(--map-ink)"
+                          pointerEvents="none"
+                        >
+                          {len.toFixed(2)} м
+                        </text>
+                        {len * k > 40 && (
+                          <g data-handle="insert" data-index={i} style={{ cursor: 'copy' }}>
+                            <title>Додати вершину</title>
+                            <circle cx={mid[0]} cy={mid[1]} r={sw(6)} fill="#fff" stroke="var(--map-acc)" strokeWidth={sw(1.5)} />
+                            <path
+                              d={`M${mid[0] - sw(3)} ${mid[1]}H${mid[0] + sw(3)}M${mid[0]} ${mid[1] - sw(3)}V${mid[1] + sw(3)}`}
+                              stroke="var(--map-ink)"
+                              strokeWidth={sw(1.5)}
+                              pointerEvents="none"
+                            />
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+                  {room.pts.map((v, i) => (
+                    <circle
+                      key={`v${i}`}
+                      data-handle="vertex"
+                      data-index={i}
+                      cx={v[0]}
+                      cy={v[1]}
+                      r={sw(activeVertex === i ? 7 : 5)}
+                      fill={activeVertex === i ? 'var(--map-acc)' : '#fff'}
+                      stroke="var(--map-pri)"
+                      strokeWidth={sw(2)}
+                      style={{ cursor: 'move' }}
+                    />
+                  ))}
+                </g>
+              )}
+              {tool === 'select' && selected && isPartition(selected) && (
+                <g aria-label="Кінці перегородки">
+                  <text
+                    x={(selected.start[0] + selected.end[0]) / 2}
+                    y={(selected.start[1] + selected.end[1]) / 2 - selected.thickness / 2 - 10 / k}
+                    fontSize={11 / k}
+                    textAnchor="middle"
+                    fill="var(--map-ink)"
+                    pointerEvents="none"
+                  >
+                    {dist(selected.start, selected.end).toFixed(2)} м
+                  </text>
+                  {(['start', 'end'] as const).map((end) => (
+                    <circle
+                      key={end}
+                      data-handle={end}
+                      data-part={selected.id}
+                      cx={selected[end][0]}
+                      cy={selected[end][1]}
+                      r={sw(6)}
+                      fill="#fff"
+                      stroke="var(--map-acc)"
+                      strokeWidth={sw(2)}
+                      style={{ cursor: 'move' }}
+                    />
+                  ))}
+                </g>
+              )}
+              {(tool === 'wall' ||
+                tool === 'partition' ||
+                vertexDrag.current !== null ||
+                (partDrag.current !== null && partDrag.current.mode !== 'move')) && (
+                <g pointerEvents="none">
+                  {alignGuides(cur).map(([a, b], i) => (
+                    <line
+                      key={i}
+                      x1={a[0]}
+                      y1={a[1]}
+                      x2={b[0]}
+                      y2={b[1]}
+                      stroke="var(--map-acc)"
+                      strokeWidth={sw(1)}
+                      strokeDasharray={`${sw(5)} ${sw(4)}`}
+                    />
+                  ))}
+                </g>
+              )}
               {poly.length > 0 && (
                 <g pointerEvents="none">
                   <polyline
@@ -486,6 +930,24 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
                   ))}
                   <text x={cur[0] + 0.4} y={cur[1] - 0.4} fontSize={12 / k} fill="var(--map-ink)">
                     {Math.hypot(cur[0] - poly[poly.length - 1][0], cur[1] - poly[poly.length - 1][1]).toFixed(1)} м
+                  </text>
+                </g>
+              )}
+              {tool === 'partition' && chainStart && (
+                <g pointerEvents="none">
+                  <line
+                    x1={chainStart[0]}
+                    y1={chainStart[1]}
+                    x2={cur[0]}
+                    y2={cur[1]}
+                    stroke="var(--map-acc)"
+                    strokeOpacity=".8"
+                    strokeWidth={DEFAULT_PARTITION_THICKNESS}
+                    strokeLinecap="square"
+                  />
+                  <circle cx={chainStart[0]} cy={chainStart[1]} r={sw(4)} fill="var(--map-acc)" />
+                  <text x={cur[0] + 0.4} y={cur[1] - 0.4} fontSize={12 / k} fill="var(--map-ink)">
+                    {dist(chainStart, cur).toFixed(2)} м
                   </text>
                 </g>
               )}
@@ -569,19 +1031,26 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
               onChange={(patch) => upd(selected.id, patch)}
               onDelete={() => remove(selected.id)}
             />
+          ) : selected && isPartition(selected) ? (
+            <PartitionProperties
+              p={selected}
+              conflict={conflicts.has(selected.id)}
+              onChange={(patch) => updPartition(selected.id, patch)}
+              onDelete={() => remove(selected.id)}
+            />
+          ) : selected && isRoom(selected) ? (
+            <RoomProperties
+              pts={selected.pts}
+              vertex={activeVertex}
+              onVertexChange={setVertex}
+              onVertexDelete={removeVertex}
+              onEdgeLength={setEdgeLength}
+              onDelete={() => remove(selected.id)}
+            />
           ) : (
             <>
-              <h4>{selected ? 'Контур приміщення' : "Об'єкти"}</h4>
-              {selected ? (
-                <>
-                  {room?.t === 'room' && <p className={styles.muted}>Площа: {polygonArea(room.pts).toFixed(1)} м²</p>}
-                  <button type="button" className={cx(styles.btn, styles.btnDanger)} onClick={() => remove(selected.id)}>
-                    Видалити контур
-                  </button>
-                </>
-              ) : (
-                <p className={styles.muted}>Оберіть об'єкт на мапі, щоб змінити параметри.</p>
-              )}
+              <h4>Об'єкти</h4>
+              <p className={styles.muted}>Оберіть об'єкт на мапі, щоб змінити параметри.</p>
             </>
           )}
 
@@ -618,7 +1087,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
         <span>Крок: 0,5 м</span>
         {msg && <span className={styles.msg}>{msg}</span>}
         <span>Стелажів: {racksCount}</span>
-        {room?.t === 'room' && <span>Площа: {polygonArea(room.pts).toFixed(0)} м²</span>}
+        {room && <span>Площа: {polygonArea(room.pts).toFixed(0)} м²</span>}
         <span className={conflicts.size ? styles.bad : undefined}>Конфліктів: {conflicts.size}</span>
       </footer>
     </div>
@@ -708,6 +1177,111 @@ function Properties({
   );
 }
 
+function RoomProperties({
+  pts,
+  vertex,
+  onVertexChange,
+  onVertexDelete,
+  onEdgeLength,
+  onDelete,
+}: {
+  pts: Point[];
+  vertex: number | null;
+  onVertexChange: (index: number, p: Point) => void;
+  onVertexDelete: (index: number) => void;
+  onEdgeLength: (index: number, len: number) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
+      <h4>Контур приміщення</h4>
+      <p className={styles.muted}>
+        Площа: {polygonArea(pts).toFixed(1)} м² · вершин: {pts.length}
+      </p>
+      {vertex !== null && (
+        <>
+          <h4 className={styles.section}>Вершина {vertex + 1}</h4>
+          <CommitNumField
+            label="X, м"
+            value={round2(pts[vertex][0])}
+            step={0.5}
+            onCommit={(x) => onVertexChange(vertex, [x, pts[vertex][1]])}
+          />
+          <CommitNumField
+            label="Y, м"
+            value={round2(pts[vertex][1])}
+            step={0.5}
+            onCommit={(y) => onVertexChange(vertex, [pts[vertex][0], y])}
+          />
+          <button type="button" className={styles.btn} onClick={() => onVertexDelete(vertex)} disabled={pts.length <= 3}>
+            Видалити вершину
+          </button>
+        </>
+      )}
+      <h4 className={styles.section}>Довжини стін</h4>
+      {pts.map((a, i) => (
+        <CommitNumField
+          key={i}
+          label={`Стіна ${i + 1}, м`}
+          value={round2(dist(a, pts[(i + 1) % pts.length]))}
+          step={0.5}
+          min={MIN_PARTITION_LENGTH}
+          onCommit={(len) => onEdgeLength(i, len)}
+        />
+      ))}
+      <p className={styles.muted}>Зміна довжини рухає кінцеву вершину стіни.</p>
+      <button type="button" className={cx(styles.btn, styles.btnDanger)} onClick={onDelete}>
+        Видалити контур
+      </button>
+    </>
+  );
+}
+
+function PartitionProperties({
+  p,
+  conflict,
+  onChange,
+  onDelete,
+}: {
+  p: PartitionObject;
+  conflict: boolean;
+  onChange: (patch: Partial<PartitionObject>) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
+      <h4>Перегородка</h4>
+      <CommitNumField
+        label="Довжина, м"
+        value={round2(dist(p.start, p.end))}
+        step={0.5}
+        min={MIN_PARTITION_LENGTH}
+        onCommit={(len) => len >= MIN_PARTITION_LENGTH && onChange({ end: withLength(p.start, p.end, len) })}
+      />
+      <CommitNumField
+        label="Товщина, м"
+        value={p.thickness}
+        step={0.05}
+        min={0.05}
+        onCommit={(t) => onChange({ thickness: Math.min(1, Math.max(0.05, t)) })}
+      />
+      <CommitNumField
+        label="Висота, м"
+        value={p.height ?? ''}
+        step={0.5}
+        min={0}
+        onCommit={(h) => onChange({ height: h > 0 ? h : null })}
+        onClear={() => onChange({ height: null })}
+      />
+      <p className={styles.muted}>Порожня висота — перегородка до стелі.</p>
+      {conflict && <div className={styles.conflict}>⚠ Перетин зі стелажем або вихід за межі приміщення</div>}
+      <button type="button" className={cx(styles.btn, styles.btnDanger)} onClick={onDelete}>
+        Видалити
+      </button>
+    </>
+  );
+}
+
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className={styles.f}>
@@ -750,6 +1324,52 @@ function NumField({
   );
 }
 
+/**
+ * Числове поле, що застосовує значення лише на Enter або при втраті фокусу. Для геометрії
+ * стін: проміжні значення під час набору («1» на шляху до «12») могли б зламати контур.
+ */
+function CommitNumField({
+  label,
+  value,
+  step,
+  min,
+  onCommit,
+  onClear,
+}: {
+  label: string;
+  value: number | '';
+  step: number;
+  min?: number;
+  onCommit: (v: number) => void;
+  onClear?: () => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const commit = () => {
+    if (text === null) return;
+    setText(null);
+    if (text.trim() === '') return onClear?.();
+    const n = parseFloat(text);
+    if (!Number.isNaN(n)) onCommit(n);
+  };
+  return (
+    <label className={styles.f}>
+      <span>{label}</span>
+      <input
+        type="number"
+        step={step}
+        min={min}
+        value={text ?? value}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') setText(null);
+        }}
+      />
+    </label>
+  );
+}
+
 function SelectField({
   label,
   value,
@@ -781,6 +1401,10 @@ function Legend() {
       <div className={styles.lg}>
         <s style={{ background: 'var(--map-pri)' }} />
         Стелаж
+      </div>
+      <div className={styles.lg}>
+        <s className={styles.lgWall} />
+        Перегородка
       </div>
       <div className={styles.lg}>
         <s style={{ background: 'var(--map-bad)' }} />
