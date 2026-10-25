@@ -5,7 +5,8 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     String,
-    func
+    func,
+    CheckConstraint
 )
 from sqlalchemy.orm import (
     Mapped,
@@ -96,6 +97,13 @@ class User(Base):
     )
     
     role: Mapped["Role"] = relationship(back_populates="users")
+    
+    __table_args__ = (
+        CheckConstraint(
+            "role_id > 0",
+            name="check_role_id_positive"
+        ),
+    )
     
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r})"
