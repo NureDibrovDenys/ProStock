@@ -25,6 +25,7 @@ BANNED_DOMAINS: set[str] | None = {
     "freeml.net",
 }
 
+
 class RoleBase(BaseModel):
     name: RoleName
 

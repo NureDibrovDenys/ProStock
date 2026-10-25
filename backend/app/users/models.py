@@ -102,7 +102,7 @@ class User(Base):
         CheckConstraint(
             "role_id > 0",
             name="check_role_id_positive"
-        )
+        ),
     )
     
     def __repr__(self) -> str:
