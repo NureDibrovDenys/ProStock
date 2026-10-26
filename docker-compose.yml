@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-prostock}
+      POSTGRES_USER: ${DB_USER:-prostock}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-prostock}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      DEBUG: ${DEBUG:-false}
+      DB_NAME: ${DB_NAME:-prostock}
+      DB_USER: ${DB_USER:-prostock}
+      DB_PASSWORD: ${DB_PASSWORD:-prostock}
+      DB_HOST: db
+      DB_PORT: 5432
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      # У production за HTTPS поставте true
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      SEED_DEFAULT_USERS: ${SEED_DEFAULT_USERS:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@prostock.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin12345}
+      MANAGER_EMAIL: ${MANAGER_EMAIL:-manager@prostock.com}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:-Manager12345}
+      WORKER_EMAIL: ${WORKER_EMAIL:-worker@prostock.com}
+      WORKER_PASSWORD: ${WORKER_PASSWORD:-Worker12345}
+      IMPORT_MAX_FILE_MB: ${IMPORT_MAX_FILE_MB:-5}
+      IMPORT_MAX_ROWS: ${IMPORT_MAX_ROWS:-5000}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  postgres_data:

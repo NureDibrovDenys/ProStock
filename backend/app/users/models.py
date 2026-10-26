@@ -5,7 +5,8 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     String,
-    func
+    func,
+    CheckConstraint
 )
 from sqlalchemy.orm import (
     Mapped,
@@ -96,6 +97,80 @@ class User(Base):
     )
     
     role: Mapped["Role"] = relationship(back_populates="users")
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    
+    __table_args__ = (
+        CheckConstraint(
+            "role_id > 0",
+            name="check_role_id_positive"
+        ),
+    )
     
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r})"
+
+
+class RefreshToken(Base):
+    """Refresh-токен сесії.
+
+    Зберігається лише SHA-256 хеш самого токена: навіть при витоку БД сирі
+    токени відновити неможливо. Кожен refresh ротується — старий запис
+    позначається відкликаним (`revoked_at`).
+    """
+
+    __tablename__ = 'refresh_token'
+
+    id: Mapped[int] = mapped_column(
+        "refresh_token_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        "user_id",
+        BigInteger,
+        ForeignKey("user.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    token_hash: Mapped[str] = mapped_column(
+        "token_hash",
+        String(64),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+    issued_at: Mapped[datetime] = mapped_column(
+        "issued_at",
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        "expires_at",
+        DateTime(timezone=True),
+        nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        "revoked_at",
+        DateTime(timezone=True),
+        nullable=True
+    )
+    user_agent: Mapped[str | None] = mapped_column(
+        "user_agent",
+        String(255),
+        nullable=True
+    )
+    ip_address: Mapped[str | None] = mapped_column(
+        "ip_address",
+        String(45),
+        nullable=True
+    )
+
+    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
+    def __repr__(self) -> str:
+        return f"RefreshToken(id={self.id!r}, user_id={self.user_id!r})"
