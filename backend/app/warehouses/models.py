@@ -62,6 +62,10 @@ class Warehouse(Base):
         back_populates="warehouse",
         cascade="all, delete-orphan"
     )
+    partitions: Mapped[list["WarehousePartition"]] = relationship(
+        back_populates="warehouse",
+        cascade="all, delete-orphan"
+    )
     obstacles: Mapped[list["WarehouseObstacle"]] = relationship(
         back_populates="warehouse",
         cascade="all, delete-orphan"
@@ -256,6 +260,74 @@ class WarehouseWall(Base):
     def __repr__(self) -> str:
         return f"WarehouseWall(id={self.id!r}, vertex_order={self.vertex_order!r})"
 
+class WarehousePartition(Base):
+    __tablename__ = 'warehouse_partition'
+
+    id: Mapped[int] = mapped_column(
+        "partition_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True
+    )
+    warehouse_id: Mapped[int] = mapped_column(
+        "warehouse_id",
+        BigInteger,
+        ForeignKey(
+            "warehouse.warehouse_id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        index=True
+    )
+    start_x: Mapped[Decimal] = mapped_column(
+        "start_x",
+        Numeric(8, 2),
+        nullable=False
+    )
+    start_y: Mapped[Decimal] = mapped_column(
+        "start_y",
+        Numeric(8, 2),
+        nullable=False
+    )
+    end_x: Mapped[Decimal] = mapped_column(
+        "end_x",
+        Numeric(8, 2),
+        nullable=False
+    )
+    end_y: Mapped[Decimal] = mapped_column(
+        "end_y",
+        Numeric(8, 2),
+        nullable=False
+    )
+    thickness: Mapped[Decimal] = mapped_column(
+        "thickness",
+        Numeric(5, 2),
+        nullable=False,
+        default=Decimal("0.20"),
+        server_default=text("0.20")
+    )
+    height: Mapped[Decimal | None] = mapped_column(
+        "height",
+        Numeric(8, 2),
+        nullable=True
+    )
+
+    warehouse: Mapped["Warehouse"] = relationship(back_populates="partitions")
+
+    __table_args__ = (
+        CheckConstraint(
+            "thickness > 0",
+            name="check_partition_thickness_min"
+        ),
+        CheckConstraint(
+            "height IS NULL OR height > 0",
+            name="check_partition_height"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"WarehousePartition(id={self.id!r}, warehouse_id={self.warehouse_id!r})"
+
 class WarehouseObstacle(Base):
     __tablename__ = 'warehouse_obstacle'
 
@@ -309,6 +381,13 @@ class WarehouseObstacle(Base):
         Numeric(8, 2),
         nullable=False
     )
+    rotation_angle: Mapped[Decimal] = mapped_column(
+        "rotation_angle",
+        Numeric(5, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default=text("0.00")
+    )
     max_height: Mapped[Decimal | None] = mapped_column(
         "max_height",
         Numeric(8, 2),
@@ -316,7 +395,7 @@ class WarehouseObstacle(Base):
     )
 
     warehouse: Mapped["Warehouse"] = relationship(back_populates="obstacles")
-    
+
     __table_args__ = (
         CheckConstraint(
             "width > 0",
@@ -325,6 +404,10 @@ class WarehouseObstacle(Base):
         CheckConstraint(
             "length > 0",
             name="check_obstacle_length_min"
+        ),
+        CheckConstraint(
+            "rotation_angle >= 0 AND rotation_angle < 360",
+            name="check_obstacle_rotation_angle"
         ),
         CheckConstraint(
             "max_height IS NULL OR max_height > 0",
@@ -361,7 +444,7 @@ class WarehouseObstacle(Base):
     
     @validates("max_height")
     def validate_max_height(self, key, value):
-        if value <= 0:
+        if value is not None and value <= 0:
             raise ValueError(
                 f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
             )
@@ -472,6 +555,13 @@ class Zone(Base):
         Numeric(8, 2),
         nullable=False
     )
+    rotation_angle: Mapped[Decimal] = mapped_column(
+        "rotation_angle",
+        Numeric(5, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default=text("0.00")
+    )
     max_capacity_m3: Mapped[Decimal | None] = mapped_column(
         "max_capacity_m3",
         Numeric(10, 2),
@@ -479,7 +569,7 @@ class Zone(Base):
     )
 
     warehouse: Mapped["Warehouse"] = relationship(back_populates="zones")
-    
+
     __table_args__ = (
         CheckConstraint(
             "zone_width > 0",
@@ -488,6 +578,10 @@ class Zone(Base):
         CheckConstraint(
             "zone_length > 0",
             name="check_zone_length_min"
+        ),
+        CheckConstraint(
+            "rotation_angle >= 0 AND rotation_angle < 360",
+            name="check_zone_rotation_angle"
         ),
         CheckConstraint(
             "max_capacity_m3 IS NULL OR max_capacity_m3 > 0",
@@ -524,7 +618,7 @@ class Zone(Base):
     
     @validates("max_capacity_m3")
     def validate_max_capacity_m3(self, key, value):
-        if value <= 0:
+        if value is not None and value <= 0:
             raise ValueError(
                 f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
             )
