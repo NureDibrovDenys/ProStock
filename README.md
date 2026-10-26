@@ -1,5 +1,7 @@
 # ProStock
 
+[![CI](https://github.com/NureDibrovDenys/ProStock/actions/workflows/ci.yml/badge.svg)](https://github.com/NureDibrovDenys/ProStock/actions/workflows/ci.yml) [![Backend tests](https://img.shields.io/badge/pytest-59%20passed-brightgreen)](backend/tests) [![E2E](https://img.shields.io/badge/e2e-50%20passed-brightgreen)](frontend/e2e)
+
 Система управління складом: FastAPI + PostgreSQL на бекенді, React 19 + TypeScript
 на фронтенді. Цей етап додає повноцінну авторизацію, керування товарами,
 імпорт/експорт каталогу та рольовий доступ.
@@ -46,6 +48,13 @@
 - шаблони: `GET /products/import/template?format=csv|xlsx`;
 - експорт: `GET /products/export?format=csv|xlsx` з урахуванням поточних фільтрів;
   CSV — UTF-8 BOM і `;` (коректно відкривається в Excel), XLSX — зі стилями й фільтром.
+
+### Склад і карта
+- `GET /warehouses/{id}` — картка складу;
+- `GET /warehouses/{id}/dashboard` — KPI: стелажі, зони, заповненість, вільна площа, останні операції;
+- `GET /warehouses/{id}/racks` і `/racks/{code}` — заповненість стелажів і полиці;
+- `GET/PUT /warehouses/{id}/map` — топологія з конструктора; зберігається **в БД**
+  (JSON-знімок + синхронізація стелажів, зон, перешкод, стін і точок входу).
 
 ### Рольовий доступ (RBAC)
 | Дія | root | administrator | warehouse_manager | storekeeper | guest |
@@ -118,7 +127,7 @@ npm run build        # tsc -b + vite build
 ## Тести
 
 ```bash
-# Бекенд: 33 інтеграційні тести (окрема БД, ASGI-транспорт)
+# Бекенд: 59 інтеграційних тестів (окрема БД, ASGI-транспорт)
 createdb prostock_test           # або: psql -c "CREATE DATABASE prostock_test"
 cd backend && .venv/bin/python -m pytest -q
 
@@ -130,7 +139,7 @@ python3 frontend/e2e/check_ui.py            # 50 перевірок
 python3 frontend/e2e/check_autologout.py    # див. frontend/e2e/README.md
 ```
 
-Перевірено на свіжому клоні `main`: 33 pytest-тести API, 50 E2E-перевірок UI,
+Перевірено: 59 pytest-тестів API, 50 E2E-перевірок UI,
 авто-вихід за таймером, `npm ci && npm run build`, `alembic upgrade head` на чистій БД.
 
 ## Структура
@@ -142,6 +151,7 @@ backend/
     users/         моделі Role/User/RefreshToken, CRUD, REST, схеми
     products/      моделі, CRUD, імпорт/експорт (CSV/XLSX), REST, схеми
     routers/       auth, map
+    warehouses/    картка складу, стелажі, дашборд, сервіс топології
     utils/         JWT/паролі/рольові залежності, rate limiter
   alembic/         міграції (остання — refresh_token)
   tests/           pytest-інтеграційні тести
@@ -155,11 +165,12 @@ frontend/
 ```
 
 Детальний контракт API — [frontend/API.md](frontend/API.md).
+UI-специфікація та скріншоти — [docs/UI.md](docs/UI.md).
+Стан спринту й трасування вимог — [docs/SPRINT.md](docs/SPRINT.md).
 
 ## Відомі обмеження
 
-- ендпоінти складу (`GET /warehouses/{id}`, `/dashboard`, `/racks`) ще не реалізовані —
-  сторінка «Склад» показує повідомлення про відсутній ендпоінт;
-- мапа складу зберігається в памʼяті процесу (не в БД);
+- реєстрація та відновлення пароля (є лише вхід);
 - привʼязка користувача до складу (`warehouse_id`) приймається API, але в моделі ще не зберігається;
-- посада та облік змін (`position`, `on_shift`) поки що не зберігаються.
+- посада та облік змін (`position`, `on_shift`) поки що не зберігаються;
+- аудит-лог дій (модель `logs` порожня) і місце зберігання товару на полиці.
