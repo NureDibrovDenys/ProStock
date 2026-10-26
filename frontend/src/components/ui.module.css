@@ -28,6 +28,7 @@
 
 .pageActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -148,5 +149,16 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+
+@media (max-width: 720px) {
+  .pageHeader {
+    align-items: flex-start;
+  }
+
+  .pageActions {
+    width: 100%;
   }
 }

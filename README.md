@@ -1,5 +1,7 @@
 # ProStock
 
+[![CI](https://github.com/NureDibrovDenys/ProStock/actions/workflows/ci.yml/badge.svg)](https://github.com/NureDibrovDenys/ProStock/actions/workflows/ci.yml) [![Backend tests](https://img.shields.io/badge/pytest-47%20passed-brightgreen)](backend/tests) [![E2E](https://img.shields.io/badge/e2e-50%20passed-brightgreen)](frontend/e2e)
+
 Система управління складом: FastAPI + PostgreSQL на бекенді, React 19 + TypeScript
 на фронтенді. Цей етап додає повноцінну авторизацію, керування товарами,
 імпорт/експорт каталогу та рольовий доступ.
@@ -118,7 +120,7 @@ npm run build        # tsc -b + vite build
 ## Тести
 
 ```bash
-# Бекенд: 33 інтеграційні тести (окрема БД, ASGI-транспорт)
+# Бекенд: 47 інтеграційних тестів (окрема БД, ASGI-транспорт)
 createdb prostock_test           # або: psql -c "CREATE DATABASE prostock_test"
 cd backend && .venv/bin/python -m pytest -q
 
@@ -130,7 +132,7 @@ python3 frontend/e2e/check_ui.py            # 50 перевірок
 python3 frontend/e2e/check_autologout.py    # див. frontend/e2e/README.md
 ```
 
-Перевірено на свіжому клоні `main`: 33 pytest-тести API, 50 E2E-перевірок UI,
+Перевірено на свіжому клоні `main`: 47 pytest-тестів API, 50 E2E-перевірок UI,
 авто-вихід за таймером, `npm ci && npm run build`, `alembic upgrade head` на чистій БД.
 
 ## Структура
@@ -155,6 +157,8 @@ frontend/
 ```
 
 Детальний контракт API — [frontend/API.md](frontend/API.md).
+UI-специфікація та скріншоти — [docs/UI.md](docs/UI.md).
+Стан спринту й трасування вимог — [docs/SPRINT.md](docs/SPRINT.md).
 
 ## Відомі обмеження
 

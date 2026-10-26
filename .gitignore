@@ -18,3 +18,9 @@ backend/.env
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# Coverage
+.coverage
+backend/.coverage
+coverage.xml
+htmlcov/

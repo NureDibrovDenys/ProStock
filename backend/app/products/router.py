@@ -171,7 +171,7 @@ async def import_products(
     content = await file.read()
     if len(content) > transfer.MAX_FILE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"Файл завеликий: максимум {settings.IMPORT_MAX_FILE_MB} МБ",
         )
 

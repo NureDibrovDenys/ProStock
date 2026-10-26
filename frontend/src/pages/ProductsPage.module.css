@@ -360,6 +360,21 @@
     align-items: stretch;
   }
 
+  /* У колонковому flex `flex: 1 1 260px` розтягував поле пошуку по висоті */
+  .search {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filterSelect {
+    width: 100%;
+  }
+
+  .toolbarButton {
+    flex: 0 0 auto;
+  }
+
   .foundCount {
     margin-left: 0;
     text-align: right;
