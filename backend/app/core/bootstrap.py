@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,8 +61,20 @@ async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role
         logger.info("Створено стартового користувача %s (%s)", email, role_name.value)
 
 
+async def ensure_default_warehouse(session: AsyncSession) -> None:
+    """Створює склад за замовчуванням, якщо складів ще немає (з ним працює редактор мапи)."""
+    from app.warehouses.models import Warehouse
+
+    if await session.scalar(select(Warehouse.id).limit(1)):
+        return
+    # Площа-заглушка: перерахується з контуру стін під час першого збереження мапи
+    session.add(Warehouse(name="Основний склад", total_area=Decimal("1.00")))
+    logger.info("Створено склад за замовчуванням")
+
+
 async def bootstrap(session: AsyncSession) -> None:
     roles = await ensure_roles(session)
     if settings.SEED_DEFAULT_USERS:
         await ensure_default_users(session, roles)
+    await ensure_default_warehouse(session)
     await session.commit()
