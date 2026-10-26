@@ -99,11 +99,12 @@ pip install -r requirements.txt -r requirements-dev.txt
 
 cp .env.example .env      # заповніть DB_* та SECRET_KEY
 alembic upgrade head
+python -m scripts.seed_demo   # необовʼязково: 9 демо-товарів у 3 категоріях
 uvicorn app.main:app --reload --port 8000
 ```
 
 Потрібен PostgreSQL 16. Ролі та стартові користувачі створюються автоматично під час
-старту застосунку (ідемпотентно).
+старту застосунку (ідемпотентно). `scripts/seed_demo.py` також ідемпотентний.
 
 ### Фронтенд
 
@@ -117,16 +118,20 @@ npm run build        # tsc -b + vite build
 ## Тести
 
 ```bash
-# Бекенд: 33 інтеграційні тести (окрема БД prostock_test, ASGI-транспорт)
+# Бекенд: 33 інтеграційні тести (окрема БД, ASGI-транспорт)
+createdb prostock_test           # або: psql -c "CREATE DATABASE prostock_test"
 cd backend && .venv/bin/python -m pytest -q
 
-# E2E у браузері (потрібні запущені бекенд і фронтенд)
+# E2E у браузері (потрібні запущені бекенд і фронтенд; сценарій самодостатній)
 python3 -m pip install playwright && python3 -m playwright install chromium
-python3 frontend/e2e/check_ui.py
+python3 frontend/e2e/check_ui.py            # 50 перевірок
+
+# Авто-вихід за таймером (бекенд із ACCESS_TOKEN_EXPIRE_MINUTES=1)
+python3 frontend/e2e/check_autologout.py    # див. frontend/e2e/README.md
 ```
 
-Перевірено: 33 pytest-тести API, 49 E2E-перевірок UI, `npm run build`, `alembic upgrade head`
-на чистій базі.
+Перевірено на свіжому клоні `main`: 33 pytest-тести API, 50 E2E-перевірок UI,
+авто-вихід за таймером, `npm ci && npm run build`, `alembic upgrade head` на чистій БД.
 
 ## Структура
 
@@ -140,6 +145,7 @@ backend/
     utils/         JWT/паролі/рольові залежності, rate limiter
   alembic/         міграції (остання — refresh_token)
   tests/           pytest-інтеграційні тести
+  scripts/         seed_demo.py — ідемпотентний демо-каталог
 frontend/
   src/api/         HTTP-клієнт із refresh-логікою, типи, виклики
   src/auth/        AuthProvider (авто-refresh/вихід), RequireAuth, RequirePermission

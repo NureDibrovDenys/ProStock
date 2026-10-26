@@ -10,7 +10,9 @@ from pathlib import Path
 from playwright.sync_api import Page, expect, sync_playwright
 
 BASE = os.environ.get("PROSTOCK_WEB_URL", "http://127.0.0.1:5173")
-SKU = f"E2E-{int(time.time())}"
+RUN_ID = int(time.time())
+SKU = f"E2E-{RUN_ID}"
+CATEGORY = f"E2E Категорія {RUN_ID}"
 CSV = Path(os.environ.get("TMPDIR", "/tmp")) / "prostock_e2e_import.csv"
 
 passed = 0
@@ -38,8 +40,8 @@ def login(page: Page, email: str, password: str) -> None:
 def main() -> int:
     CSV.write_text(
         "sku_code;name;category;unit_of_measure;width;length;height;weight;min_stock_level\n"
-        "E2E-IMP-1;E2E Імпорт 1;E2E Категорія;шт;0,1;0,2;0,3;1,5;2\n"
-        "E2E-IMP-BAD;Зламаний рядок;E2E Категорія;pcs;oops;1;1;1;\n",
+        f"E2E-IMP-1;E2E Імпорт 1;{CATEGORY};шт;0,1;0,2;0,3;1,5;2\n"
+        f"E2E-IMP-BAD;Зламаний рядок;{CATEGORY};pcs;oops;1;1;1;\n",
         encoding="utf-8",
     )
 
@@ -93,22 +95,23 @@ def main() -> int:
             check("refresh-cookie httpOnly", refresh_cookies[0]["httpOnly"] is True)
             check("refresh-cookie не в localStorage", "prostock_refresh" not in token_in_storage["local"])
 
-        print("\n[3] Таблиця товарів")
+        print("\n[3] Каталог товарів")
         page.get_by_role("link", name="Товари").click()
         page.wait_for_url("**/products")
         expect(page.get_by_text(re.compile("у каталозі"))).to_be_visible(timeout=10000)
-        rows_before = page.locator("table tbody tr").count()
-        check("таблиця завантажилась", rows_before > 0, str(rows_before))
-        expect(page.get_by_role("button", name=re.compile("артикул", re.IGNORECASE))).to_be_visible()
-        check("є сортування за артикулом", True)
+        # Каталог може бути порожнім на чистій БД — перевіряємо або таблицю, або empty state
+        if page.locator("table tbody tr").count() == 0:
+            expect(page.get_by_text("Каталог порожній")).to_be_visible()
+            check("порожній каталог показує підказку", True)
+        else:
+            check("таблиця завантажилась", True)
 
-        page.get_by_label("Пошук товарів").fill("CHEM-001")
-        expect(page.locator("table tbody tr")).to_have_count(1, timeout=10000)
-        check("пошук працює", page.get_by_text("CHEM-001").is_visible())
+        page.get_by_label("Пошук товарів").fill("ZZZ-НЕІСНУЮЧИЙ-АРТИКУЛ")
+        expect(page.get_by_text("Нічого не знайдено")).to_be_visible(timeout=10000)
+        check("пошук без результатів", True)
         page.get_by_label("Пошук товарів").fill("")
-        expect(page.locator("table tbody tr")).not_to_have_count(1, timeout=10000)
 
-        print("\n[4] Створення товару")
+        print("\n[4] Створення товару (разом із категорією)")
         page.get_by_role("button", name="Новий товар").click()
         expect(page.get_by_role("dialog")).to_be_visible()
         check("модальне вікно відкрилось", True)
@@ -119,9 +122,14 @@ def main() -> int:
         check("валідація категорії", dialog.get_by_role("alert").filter(has_text="Оберіть категорію").first.is_visible())
         check("валідація ширини", dialog.get_by_role("alert").filter(has_text="Вкажіть ширину").first.is_visible())
 
+        dialog.get_by_role("button", name="Нова категорія").click()
+        dialog.get_by_label("Назва нової категорії").fill(CATEGORY)
+        dialog.get_by_role("button", name="Створити категорію").click()
+        expect(dialog.get_by_label("Категорія *")).to_have_value(re.compile(r"\d+"), timeout=10000)
+        check("категорію створено з модального вікна", True)
+
         dialog.get_by_label("Артикул (SKU) *").fill(SKU)
         dialog.get_by_label("Назва товару *").fill("E2E тестовий товар")
-        dialog.get_by_label("Категорія *").select_option(label="Побутова хімія")
         dialog.get_by_label("Ширина, м *").fill("0,25")
         dialog.get_by_label("Довжина, м *").fill("0,35")
         dialog.get_by_label("Висота, м *").fill("0,15")
@@ -134,7 +142,9 @@ def main() -> int:
         page.get_by_label("Пошук товарів").fill(SKU)
         expect(page.locator("table tbody tr")).to_have_count(1, timeout=10000)
         check("новий товар у таблиці", page.get_by_text(SKU).is_visible())
-        check("категорія у рядку", "Побутова хімія" in page.locator("table tbody tr").first.inner_text())
+        check("категорія у рядку", CATEGORY in page.locator("table tbody tr").first.inner_text())
+        expect(page.get_by_role("button", name=re.compile("артикул", re.IGNORECASE))).to_be_visible()
+        check("є сортування за артикулом", True)
 
         print("\n[5] Редагування товару")
         page.get_by_role("button", name=re.compile(f"Редагувати")).first.click()
@@ -149,7 +159,7 @@ def main() -> int:
         dialog = page.get_by_role("dialog")
         expect(dialog).to_be_visible()
         dialog.locator('input[type="file"]').set_input_files(str(CSV))
-        check("файл вибрано", dialog.get_by_text("e2e_import.csv").is_visible())
+        check("файл вибрано", dialog.get_by_text(CSV.name).is_visible())
         dialog.get_by_role("button", name="Імпортувати").click()
         expect(dialog.get_by_text("Результат імпорту")).to_be_visible(timeout=20000)
         check("звіт: блок «Створено»", dialog.get_by_text("Створено", exact=True).is_visible())
@@ -163,7 +173,7 @@ def main() -> int:
         download = download_info.value
         check("звіт про помилки завантажується", download.suggested_filename.startswith("import_errors_"))
         dialog.get_by_role("button", name="Готово").click()
-        expect(page.locator('[role="status"]').filter(has_text="Імпорт «e2e_import.csv»")).to_be_visible()
+        expect(page.locator('[role="status"]').filter(has_text=f"Імпорт «{CSV.name}»")).to_be_visible()
 
         print("\n[7] Експорт")
         with page.expect_download() as csv_info:
