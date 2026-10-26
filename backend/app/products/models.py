@@ -165,11 +165,19 @@ class Product(Base):
     
     @validates("min_stock_level")
     def validate_min_stock_level(self, key, value):
-        if value <= 0:
+        if value is None:
+            return None
+        try:
+            decimal_value = Decimal(str(value))
+        except (TypeError, ValueError):
             raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
+                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
             )
-        return value
+        if decimal_value < 0:
+            raise ValueError(
+                f"Error: attribute {key!r} value cannot be negative (obtained: {value!r})"
+            )
+        return decimal_value
     
     def __repr__(self) -> str:
         return f"Product(id={self.id!r}, name={self.name!r}, SKU={self.sku_code!r})"

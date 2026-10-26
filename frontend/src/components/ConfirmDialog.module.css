@@ -1,0 +1,37 @@
+.content {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(129, 30, 30, 0.1);
+  color: var(--color-danger);
+}
+
+.message {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.details {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(129, 30, 30, 0.08);
+  font-size: 13px;
+  color: var(--color-danger);
+}

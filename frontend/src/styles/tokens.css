@@ -1,0 +1,65 @@
+/* Дизайн-токени ProStock — значення взяті з макета Figma */
+:root {
+  /* Бренд */
+  --color-primary: #656b46;
+  --color-primary-soft: #a5a176;
+  --color-save: #466b46;
+  --color-danger: #811e1e;
+  --color-danger-bar: #8c1f1f;
+
+  /* Поверхні */
+  --color-bg: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-canvas: #f4f5f7;
+  --color-editor-bg: #30362d;
+  --color-border: #dbdbdb;
+  --color-input-border: #bfbfbf;
+  --color-track: #e6e6e6;
+
+  /* Текст */
+  --color-text: #212121;
+  --color-muted: #737373;
+  --color-placeholder: #999999;
+  --color-on-primary: #ffffff;
+
+  /* Статуси */
+  --color-success-bg: #d1f0d1;
+  --color-success-text: #297333;
+  --color-neutral-bg: #ebebeb;
+
+  /* Графіки */
+  --color-rack: #2666d9;
+  --color-highlight: #fca311;
+
+  /* Мапа складу та конструктор (палітра з SRS, розд. 3.7) */
+  --map-bg: #f4f5f7;
+  --map-panel: #ffffff;
+  --map-ink: #2b2d42;
+  --map-pri: #1d3557;
+  --map-pri-hover: #2c4f7c;
+  --map-acc: #fca311;
+  --map-wall-hover: #8b5cf6;
+  --map-ok: #1ee839;
+  --map-okd: #12a52b;
+  --map-bad: #d62828;
+  --map-store: #3a86ff;
+  --map-room: #f4f5f7;
+  --map-line: #d5d8de;
+  --map-muted: #6b7080;
+  --map-grid-minor: rgba(29, 53, 87, 0.1);
+  --map-grid-major: rgba(29, 53, 87, 0.26);
+
+  /* Радіуси */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-pill: 20px;
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --page-gutter: 40px;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --page-gutter: 16px;
+  }
+}
