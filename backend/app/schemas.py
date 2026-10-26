@@ -1,14 +1,9 @@
+from datetime import datetime
 from decimal import Decimal
-from importlib.metadata import entry_points
-from multiprocessing.reduction import duplicate
+
+from pydantic import BaseModel, EmailStr, Field, condecimal, field_validator, model_validator
 from typing_extensions import Annotated
 
-from pydantic import BaseModel, Field, condecimal, field_validator, model_validator
-from typing import List, Optional
-
-from sqlalchemy import Numeric
-
-from app import warehouses
 from app.core.enums import ObstacleType, PointType, ZoneType
 
 #обмеження
@@ -131,11 +126,53 @@ class WareHouseMapSchema(WarehouseMapUpdateSchema):
 
 #схеми для токена та логіну 
 class UserLoginSchema(BaseModel):
-    
-    password: str
-    email:str
+    """Тіло запиту на вхід. Валідація — до звернення до БД."""
+
+    email: EmailStr = Field(..., description="Робоча пошта")
+    password: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Пароль (перевірка складності — на етапі створення)",
+    )
+
+    @field_validator("email")
+    @classmethod
+    def normalize_login_email(cls, value: str) -> str:
+        from app.users.schemas import normalize_email
+        return normalize_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def password_bytes_limit(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Пароль занадто довгий (максимум 72 байти)")
+        return value
+
 
 class TokenSchema(BaseModel):
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
+    expires_in: int = 0
+
+
+class AuthUserSchema(BaseModel):
+    """Профіль користувача, який повертається разом із токеном."""
+
+    user_id: int
+    user_email: str
+    first_name: str
+    last_name: str
+    role: str
+    status: str
+    permissions: dict[str, bool]
+
+
+class AuthResponseSchema(TokenSchema):
+    user: AuthUserSchema
+
+
+class ProfileSchema(AuthUserSchema):
+    created_at: datetime
+
 
