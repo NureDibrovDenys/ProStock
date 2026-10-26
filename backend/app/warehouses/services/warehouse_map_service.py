@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+from itertools import count
 from typing import Any
+
+#колекція мапи -> поле ідентифікатора її об'єктів
+_ID_FIELDS = {
+    "partitions": "partition_id",
+    "racks": "rack_id",
+    "obstacles": "obstacle_id",
+    "zones": "zone_id",
+    "entry_points": "point_id",
+}
 
 
 class WarehouseMapService:
     """Сервіс роботи з картою складу до підключення постійного сховища."""
 
     _maps: dict[int, dict[str, Any]] = {}
+    #лічильник id для нових об'єктів (замість автоінкременту в БД)
+    _next_id = count(1)
 
     @classmethod
     def get_map(cls, warehouse_id: int) -> dict[str, Any]:
@@ -15,8 +27,17 @@ class WarehouseMapService:
 
     @classmethod
     def save_map(cls, warehouse_id: int, map_data: dict[str, Any]) -> dict[str, Any]:
-        """Тимчасово зберігає карту в пам'яті."""
+        """
+        Тимчасово зберігає карту в пам'яті. PUT повністю замінює топологію;
+        об'єкти без id отримують новий id, щоб наступне збереження з фронта
+        не створювало дублікати.
+        """
         # TODO: зберігання у БД
+        for collection, id_field in _ID_FIELDS.items():
+            for item in map_data.get(collection, []):
+                if item.get(id_field) is None:
+                    item[id_field] = next(cls._next_id)
+
         saved_map = {
             **map_data,
             "warehouse_id": warehouse_id,

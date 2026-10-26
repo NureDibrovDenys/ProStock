@@ -14,15 +14,14 @@ router = APIRouter(prefix="/api/v1/warehouses", tags=["Warehouse Map"])
 def get_warehouse_map(warehouse_id: int):
     return WarehouseMapService.get_map(warehouse_id)
 
-@router.put("/{warehouse_id}/map", dependencies=[Depends(require_roles(ROOT, ADMIN, WAREHOUSE_MANAGER))])
+#відповідь — збережена мапа з id нових об'єктів (фронт кладе її у кеш замість надісланої)
+@router.put(
+    "/{warehouse_id}/map",
+    response_model=WareHouseMapSchema,
+    dependencies=[Depends(require_roles(ROOT, ADMIN, WAREHOUSE_MANAGER))],
+)
 def save_warehouse_map(warehouse_id: int, map_data: WarehouseMapUpdateSchema):
-    saved_map = WarehouseMapService.save_map(
+    return WarehouseMapService.save_map(
         warehouse_id,
         map_data.model_dump(mode="json"),
     )
-
-    return {
-        "status": "success",
-        "message": f"Топологія складу {warehouse_id} успішно збережена у тимчасову пам'ять.",
-        "data": saved_map,
-    }

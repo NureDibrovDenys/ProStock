@@ -213,7 +213,13 @@
 | Метод | Шлях | Статус |
 |---|---|---|
 | GET | `/warehouses/{id}/map` | тимчасово зберігається в памʼяті процесу |
-| PUT | `/warehouses/{id}/map` | те саме |
+| PUT | `/warehouses/{id}/map` | те саме; відповідь — збережена мапа з `*_id` нових об'єктів |
+
+Формат мапи — `WarehouseMapUpdateSchema` у `backend/app/schemas.py` (приклад — у Swagger):
+метри, `coord_x`/`coord_y` — центр об'єкта, `rotation_angle` — градуси за годинниковою стрілкою [0, 360).
+`walls` — вершини контуру з `vertex_order` (простий полігон, площа > 0), `partitions` — перегородки
+`start_x/start_y/end_x/end_y/thickness/height`, далі `racks`, `obstacles`, `zones`, `entry_points`.
+Об'єкти з `*_id` зберігають його, без `*_id` — отримують новий. Числа віддаються числами.
 | GET | `/warehouses/{id}`, `/dashboard`, `/racks` | ще не реалізовано |
 
 Усі ці ендпоінти вимагають авторизації; запис мапи — root / administrator / warehouse_manager.
