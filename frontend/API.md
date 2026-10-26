@@ -208,15 +208,54 @@
 
 ---
 
-## Склад (залишено з попереднього етапу)
+## Склад
 
-| Метод | Шлях | Статус |
+| Метод | Шлях | Опис |
 |---|---|---|
-| GET | `/warehouses/{id}/map` | тимчасово зберігається в памʼяті процесу |
-| PUT | `/warehouses/{id}/map` | те саме |
-| GET | `/warehouses/{id}`, `/dashboard`, `/racks` | ще не реалізовано |
+| GET | `/warehouses/{id}` | картка складу |
+| GET | `/warehouses/{id}/dashboard` | KPI та заповненість стелажів |
+| GET | `/warehouses/{id}/racks` | стислий список стелажів |
+| GET | `/warehouses/{id}/racks/{code}` | полиці стелажа |
+| GET | `/warehouses/{id}/map` | топологія складу |
+| PUT | `/warehouses/{id}/map` | збереження топології |
 
-Усі ці ендпоінти вимагають авторизації; запис мапи — root / administrator / warehouse_manager.
+Усі ендпоінти вимагають авторизації; запис мапи — root / administrator / warehouse_manager.
+
+```json
+// GET /warehouses/1
+{ "warehouse_id": 1, "warehouse_name": "А-01", "warehouse_address": "Київ", "total_warehouse_area": 1000.0 }
+
+// GET /warehouses/1/dashboard
+{
+  "racks_count": 3, "zones_count": 3, "fill_percent": 50, "fill_change_week": 0,
+  "on_shift": 0, "employees_total": 3, "free_area_m2": 695.09, "total_area_m2": 1000.0,
+  "updated_at": "2026-10-26T18:20:00Z",
+  "rack_fill": [{ "rack_id": 1, "rack_code": "R-1", "fill_percent": 50 }],
+  "recent_operations": []
+}
+
+// GET /warehouses/1/racks
+[{ "rack_id": 1, "rack_code": "R-1", "shelves_count": 4, "fill_percent": 50 }]
+
+// GET /warehouses/1/racks/R-1
+{
+  "rack_id": 1, "rack_code": "R-1", "zone_name": null,
+  "updated_at": "2026-10-26T18:20:00Z",
+  "shelves": [{ "shelf_id": 1, "shelf_code": "R-1-1", "product_name": null,
+                "occupied": 1, "capacity": 1, "shelf_status": "occupied" }]
+}
+```
+
+### Мапа складу
+
+Формат — як у конструкторі: `walls` (вершини), `partitions`, `racks`, `obstacles`,
+`zones`, `entry_points` (координати — центри, метри, кути в градусах).
+
+- `GET` повертає збережений знімок із БД; якщо знімка немає — будує мапу з таблиць;
+- `PUT` оновлює знімок і синхронізує стелажі/зони/перешкоди/стіни/точки входу;
+  відсутні в запиті обʼєкти видаляються;
+- порожній склад — `200` з порожніми масивами;
+- невідомий склад — `404`; запис без прав — `403`.
 
 ---
 

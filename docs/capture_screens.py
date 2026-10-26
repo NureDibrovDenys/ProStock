@@ -33,7 +33,7 @@ def login(page, email: str, password: str) -> None:
     page.get_by_label("Пошта", exact=True).fill(email)
     page.get_by_label("Пароль", exact=True).fill(password)
     page.get_by_role("button", name="Увійти").click()
-    page.wait_for_url(re.compile(r"/products"), timeout=15000)
+    page.wait_for_url(re.compile(r"/($|products)"), timeout=15000)
 
 
 def main() -> None:
@@ -48,7 +48,8 @@ def main() -> None:
         page.screenshot(path=OUT / "login.png")
 
         login(page, EMAIL, PASSWORD)
-        page.wait_for_timeout(600)
+        page.goto(f"{BASE}/products")
+        page.wait_for_timeout(900)
         page.screenshot(path=OUT / "products.png")
 
         page.get_by_role("button", name="Новий товар").click()
@@ -74,14 +75,16 @@ def main() -> None:
         mobile = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1)
         mobile_page = mobile.new_page()
         login(mobile_page, EMAIL, PASSWORD)
-        mobile_page.wait_for_timeout(600)
+        mobile_page.goto(f"{BASE}/products")
+        mobile_page.wait_for_timeout(900)
         mobile_page.screenshot(path=OUT / "products-mobile.png")
         mobile.close()
 
         readonly = browser.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
         readonly_page = readonly.new_page()
         login(readonly_page, "worker@prostock.com", "Worker12345")
-        readonly_page.wait_for_timeout(600)
+        readonly_page.goto(f"{BASE}/products")
+        readonly_page.wait_for_timeout(900)
         readonly_page.screenshot(path=OUT / "products-readonly.png")
         readonly.close()
 

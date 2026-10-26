@@ -128,7 +128,7 @@
   }
 
   .tabs .tab {
-    flex: 1;
+    flex: 0 0 auto;
     text-align: center;
     justify-content: center;
   }
@@ -139,6 +139,19 @@
   }
 
   .userInfo {
+    display: none;
+  }
+}
+
+
+@media (max-width: 480px) {
+  .tab {
+    padding: 8px;
+    font-size: 13px;
+  }
+
+  /* На вузьких екранах залишаємо лише текст — 4 вкладки вміщуються без обрізання */
+  .tabs .tab svg {
     display: none;
   }
 }

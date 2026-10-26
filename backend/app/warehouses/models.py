@@ -1,7 +1,9 @@
 from decimal import Decimal
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
+    DateTime,
     Enum,
     ForeignKey,
     Integer,
@@ -10,6 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     CheckConstraint,
+    func,
     text
 )
 from sqlalchemy.orm import (
@@ -77,6 +80,11 @@ class Warehouse(Base):
     racks: Mapped[list["Rack"]] = relationship(
         back_populates="warehouse",
         cascade="all, delete-orphan"
+    )
+    map_snapshot: Mapped["WarehouseMapSnapshot | None"] = relationship(
+        back_populates="warehouse",
+        cascade="all, delete-orphan",
+        uselist=False
     )
     
     __table_args__ = (
@@ -361,6 +369,8 @@ class WarehouseObstacle(Base):
     
     @validates("max_height")
     def validate_max_height(self, key, value):
+        if value is None:
+            return None
         if value <= 0:
             raise ValueError(
                 f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
@@ -524,6 +534,8 @@ class Zone(Base):
     
     @validates("max_capacity_m3")
     def validate_max_capacity_m3(self, key, value):
+        if value is None:
+            return None
         if value <= 0:
             raise ValueError(
                 f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
@@ -822,3 +834,46 @@ class Shelf(Base):
 
     def __repr__(self) -> str:
         return f"Shelf(id={self.id!r}, code={self.code!r})"
+
+class WarehouseMapSnapshot(Base):
+    """Збережена топологія складу в форматі конструктора (JSON).
+
+    Окремий знімок дозволяє зберегти перегородки й кути повороту, для яких
+    ще немає окремих таблиць. Стелажі, зони та точки входу додатково
+    синхронізуються зі своїми таблицями, щоб ними користувалися дашборд і
+    сторінка стелажа.
+    """
+
+    __tablename__ = 'warehouse_map'
+
+    id: Mapped[int] = mapped_column(
+        "warehouse_map_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True
+    )
+    warehouse_id: Mapped[int] = mapped_column(
+        "warehouse_id",
+        BigInteger,
+        ForeignKey("warehouse.warehouse_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+    payload: Mapped[dict] = mapped_column(
+        "payload",
+        JSON,
+        nullable=False
+    )
+    updated_at: Mapped[object] = mapped_column(
+        "updated_at",
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    warehouse: Mapped["Warehouse"] = relationship(back_populates="map_snapshot")
+
+    def __repr__(self) -> str:
+        return f"WarehouseMapSnapshot(warehouse_id={self.warehouse_id!r})"

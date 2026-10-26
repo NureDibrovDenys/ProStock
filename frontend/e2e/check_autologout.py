@@ -34,7 +34,7 @@ def main() -> int:
         page.get_by_label("Пошта", exact=True).fill(EMAIL)
         page.get_by_label("Пароль", exact=True).fill(PASSWORD)
         page.get_by_role("button", name="Увійти").click()
-        page.wait_for_url(re.compile(r"/products"), timeout=15000)
+        page.wait_for_url(re.compile(r"/($|products)"), timeout=15000)
         print("PASS  вхід виконано (access-токен короткоживучий)")
 
         # Імітуємо втрату refresh-сесії: cookie відкликано/прострочено

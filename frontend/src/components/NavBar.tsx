@@ -6,6 +6,7 @@ import { cx } from '../lib/cx';
 import styles from './NavBar.module.css';
 
 const TABS = [
+  { to: '/', label: 'Головна', end: true, permission: null },
   { to: '/products', label: 'Товари', end: false, permission: 'products_read' },
   { to: '/employees', label: 'Співробітники', end: false, permission: 'users_manage' },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },

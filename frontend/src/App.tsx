@@ -20,7 +20,7 @@ export function App() {
         {/* Редактор мапи — повноекранний, без навбару (як у макеті) */}
         <Route path="/warehouse/edit" element={<MapEditorPage />} />
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/products" replace />} />
+          <Route index element={<DashboardPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route
             path="/employees"

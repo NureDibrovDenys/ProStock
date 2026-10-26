@@ -8,14 +8,30 @@
 from __future__ import annotations
 
 import asyncio
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.bootstrap import bootstrap
 from app.core.db import async_session_maker
-from app.core.enums import UnitOfMeasure
+from app.core.enums import (
+    PointType,
+    ShelfStatus,
+    UnitOfMeasure,
+    ZoneType,
+)
 from app.products.models import Category, Product
+from app.warehouses.models import (
+    Rack,
+    Shelf,
+    Warehouse,
+    WarehouseEntryPoint,
+    WarehouseMapSnapshot,
+    WarehouseWall,
+    Zone,
+)
+from app.warehouses.services.warehouse_map_service import MAP_KEYS, WarehouseMapService
 
 CATEGORIES: dict[str, str] = {
     "Побутова хімія": "Засоби для прибирання та догляду",
@@ -47,9 +63,149 @@ async def _get_or_create_category(session: AsyncSession, name: str, description:
     return category
 
 
+async def seed_warehouse(session: AsyncSession) -> None:
+    """Демо-склад із стелажами, полицями та зонами (ідемпотентно)."""
+    warehouse = await session.scalar(select(Warehouse).order_by(Warehouse.id))
+    if warehouse is None:
+        warehouse = Warehouse(
+            name="А-01",
+            address="Київ, вул. Складська, 1",
+            total_area=Decimal("1000.00"),
+        )
+        session.add(warehouse)
+        await session.flush()
+        print("  + склад Склад №1")
+
+    existing_racks = await session.scalar(
+        select(func.count(Rack.id)).where(Rack.warehouse_id == warehouse.id)
+    )
+    if not existing_racks:
+        presets = [
+            ("R-1", 12, 8, "1.10", "2.70", 4),
+            ("R-2", 18, 8, "1.10", "2.70", 4),
+            ("R-3", 24, 8, "1.10", "2.70", 4),
+        ]
+        for code, x, y, width, length, shelves_count in presets:
+            rack = Rack(
+                warehouse_id=warehouse.id,
+                code=code,
+                x=Decimal(x),
+                y=Decimal(y),
+                width=Decimal(width),
+                length=Decimal(length),
+                rotation_angle=Decimal("0"),
+                shelves_count=shelves_count,
+            )
+            session.add(rack)
+            await session.flush()
+            for level in range(1, shelves_count + 1):
+                occupied = level <= 2
+                session.add(
+                    Shelf(
+                        rack_id=rack.id,
+                        code=f"{code}-{level}",
+                        qr=f"PROSTOCK:{code}-{level}",
+                        width=Decimal("1.00"),
+                        length=Decimal("1.00"),
+                        height=Decimal("0.40"),
+                        max_weight=Decimal("120.000"),
+                        is_occupied=occupied,
+                        status=ShelfStatus.OCCUPIED if occupied else ShelfStatus.ACTIVE,
+                    )
+                )
+        print("  + 3 стелажі з полицями")
+
+    existing_zones = await session.scalar(
+        select(func.count(Zone.id)).where(Zone.warehouse_id == warehouse.id)
+    )
+    if not existing_zones:
+        session.add_all(
+            [
+                Zone(
+                    warehouse_id=warehouse.id,
+                    name="Зона приймання",
+                    type=ZoneType.INBOUND_DOCK,
+                    x=Decimal("4"),
+                    y=Decimal("3"),
+                    width=Decimal("6"),
+                    length=Decimal("8"),
+                ),
+                Zone(
+                    warehouse_id=warehouse.id,
+                    name="Зона зберігання",
+                    type=ZoneType.STORAGE_AREA,
+                    x=Decimal("17"),
+                    y=Decimal("11"),
+                    width=Decimal("10"),
+                    length=Decimal("20"),
+                ),
+                Zone(
+                    warehouse_id=warehouse.id,
+                    name="Зона відвантаження",
+                    type=ZoneType.OUTBOUND_DOCK,
+                    x=Decimal("34"),
+                    y=Decimal("3"),
+                    width=Decimal("6"),
+                    length=Decimal("8"),
+                ),
+            ]
+        )
+        print("  + 3 зони")
+
+    existing_points = await session.scalar(
+        select(func.count(WarehouseEntryPoint.id)).where(
+            WarehouseEntryPoint.warehouse_id == warehouse.id
+        )
+    )
+    if not existing_points:
+        session.add(
+            WarehouseEntryPoint(
+                warehouse_id=warehouse.id,
+                point_name="Головний вхід",
+                point_type=PointType.GENERAL_ENTRY,
+                x=Decimal("0"),
+                y=Decimal("10"),
+            )
+        )
+        print("  + точка входу")
+
+    existing_walls = await session.scalar(
+        select(func.count(WarehouseWall.id)).where(
+            WarehouseWall.warehouse_id == warehouse.id
+        )
+    )
+    if not existing_walls:
+        for order, (x, y) in enumerate(
+            [(0, 0), (40, 0), (40, 20), (0, 20)], start=1
+        ):
+            session.add(
+                WarehouseWall(
+                    warehouse_id=warehouse.id,
+                    vertex_order=order,
+                    x=Decimal(x),
+                    y=Decimal(y),
+                )
+            )
+        print("  + контур складу (4 вершини)")
+
+    await session.flush()
+    snapshot = await session.scalar(
+        select(WarehouseMapSnapshot).where(
+            WarehouseMapSnapshot.warehouse_id == warehouse.id
+        )
+    )
+    if snapshot is None:
+        payload = await WarehouseMapService.get_map(session, warehouse.id)
+        await WarehouseMapService.save_map(
+            session, warehouse.id, payload, provided_fields=set(MAP_KEYS)
+        )
+        print("  + топологію складу збережено")
+
+
 async def seed() -> None:
     async with async_session_maker() as session:
         await bootstrap(session)
+        await seed_warehouse(session)
 
         categories = {
             name: await _get_or_create_category(session, name, description)
