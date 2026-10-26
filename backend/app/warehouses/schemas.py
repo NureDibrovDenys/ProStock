@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.enums import ObstacleType, PointType, ZoneType
 
@@ -129,9 +129,9 @@ class MapEntryPointSchema(BaseModel):
 
 
 class WarehouseMapSchema(BaseModel):
-    walls: list[WallVertexSchema] = []
-    partitions: list[PartitionSchema] = []
-    racks: list[MapRackSchema] = []
-    obstacles: list[MapObstacleSchema] = []
-    zones: list[MapZoneSchema] = []
-    entry_points: list[MapEntryPointSchema] = []
+    walls: list[WallVertexSchema] = Field(default_factory=list)
+    partitions: list[PartitionSchema] = Field(default_factory=list)
+    racks: list[MapRackSchema] = Field(default_factory=list)
+    obstacles: list[MapObstacleSchema] = Field(default_factory=list)
+    zones: list[MapZoneSchema] = Field(default_factory=list)
+    entry_points: list[MapEntryPointSchema] = Field(default_factory=list)

@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import (
     JSON,
@@ -865,7 +866,7 @@ class WarehouseMapSnapshot(Base):
         JSON,
         nullable=False
     )
-    updated_at: Mapped[object] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         "updated_at",
         DateTime(timezone=True),
         server_default=func.now(),
