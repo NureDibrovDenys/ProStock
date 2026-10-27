@@ -58,6 +58,10 @@
   gap: 8px;
 }
 
+.fileInput {
+  display: none;
+}
+
 .topSave,
 .topGhost {
   min-height: 30px;

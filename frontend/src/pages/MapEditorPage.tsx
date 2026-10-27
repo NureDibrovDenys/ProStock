@@ -3,7 +3,7 @@
 // і пресетами, перешкоди, зони, точки входу, перевірка колізій і виходу за контур, undo/redo.
 // Збереження — PUT /warehouses/{id}/map.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { ObstacleType, PointType, WarehouseMap } from '../api/types';
 import { getWarehouseMap, saveWarehouseMap } from '../api/warehouse';
@@ -162,6 +162,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const rotateDrag = useRef<string | null>(null);
   const space = useRef(false);
   const msgTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const importInput = useRef<HTMLInputElement>(null);
 
   // Історія для undo/redo: знімки масиву об'єктів (вони незмінні, тож копіювати не треба)
   const past = useRef<MapObject[][]>([]);
@@ -169,6 +170,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const pendingCheckpoint = useRef(false);
   const objsRef = useRef(objs);
   objsRef.current = objs;
+  const saveRef = useRef<() => void>(() => undefined);
 
   const room = objs.find(isRoom);
   const activeVertex =
@@ -399,6 +401,11 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+        e.preventDefault();
+        saveRef.current();
+        return;
+      }
       if (/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) return;
       const s = S.current;
       const key = e.key;
@@ -711,6 +718,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     if (conflicts.size && !window.confirm(`На мапі є конфлікти (${conflicts.size}). Зберегти все одно?`)) return;
     mutation.mutate(toApi(objs));
   };
+  saveRef.current = save;
 
   const exportJson = () => {
     const data = {
@@ -727,6 +735,40 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     a.download = `warehouse-${WAREHOUSE_ID}-map.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const imported = JSON.parse(await file.text()) as Partial<WarehouseMap> & {
+        format?: string;
+        warehouse_id?: number;
+      };
+      if (imported.warehouse_id !== undefined && imported.warehouse_id !== WAREHOUSE_ID) {
+        throw new Error(`Файл призначений для складу №${imported.warehouse_id}`);
+      }
+      const collections = ['walls', 'partitions', 'obstacles', 'entry_points', 'racks', 'zones'] as const;
+      if (collections.some((collection) => !Array.isArray(imported[collection]))) {
+        throw new Error('Файл не містить коректної карти складу');
+      }
+
+      const next = fromApi(imported as WarehouseMap);
+      if (dirty && !window.confirm('Є незбережені зміни. Замінити їх імпортованою картою?')) return;
+      setObjs(() => next);
+      setSel(null);
+      setSelVertex(null);
+      setPoly([]);
+      setChainStart(null);
+      setDraft(null);
+      setTool('select');
+      vp.fitTo(mapBounds(next));
+      flash('Карту імпортовано. Натисніть Ctrl+S для збереження');
+    } catch (error) {
+      flash(`Не вдалося імпортувати JSON: ${error instanceof Error ? error.message : 'некоректний файл'}`);
+    }
   };
 
   const goBack = (e: MouseEvent) => {
@@ -798,7 +840,24 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
           <button type="button" className={styles.topGhost} onClick={exportJson}>
             Експорт JSON
           </button>
-          <button type="button" className={styles.topSave} onClick={save} disabled={mutation.isPending}>
+          <input
+            ref={importInput}
+            type="file"
+            accept=".json,application/json"
+            className={styles.fileInput}
+            onChange={importJson}
+            aria-label="Імпорт JSON"
+          />
+          <button type="button" className={styles.topGhost} onClick={() => importInput.current?.click()}>
+            Імпорт JSON
+          </button>
+          <button
+            type="button"
+            className={styles.topSave}
+            onClick={save}
+            disabled={mutation.isPending}
+            title="Зберегти (Ctrl+S)"
+          >
             {mutation.isPending ? 'Збереження…' : dirty ? 'Зберегти •' : 'Зберегти'}
           </button>
         </div>
