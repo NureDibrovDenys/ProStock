@@ -16,6 +16,19 @@ services:
   backend:
     build:
       context: ./backend
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./backend/app
+          target: /app/app
+        - action: rebuild
+          path: ./backend/alembic
+        - action: rebuild
+          path: ./backend/alembic.ini
+        - action: rebuild
+          path: ./backend/requirements.txt
+        - action: rebuild
+          path: ./backend/Dockerfile
     environment:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       DEBUG: ${DEBUG:-false}
