@@ -29,6 +29,15 @@ export interface OrientedRect {
 
 export const SNAP_STEP = 0.5;
 export const snap = (v: number) => Math.round(v / SNAP_STEP) * SNAP_STEP;
+/** Дрібний крок (1 см) — для перегородок, що ставляться без сітки. */
+export const FINE_STEP = 0.01;
+export const snapFine = (v: number) => Math.round(v * 100) / 100;
+
+/** Кут у діапазоні [0, 360). */
+export const normalizeAngle = (a: number) => {
+  const r = ((a % 360) + 360) % 360;
+  return Math.abs(r - 360) < 1e-9 ? 0 : r;
+};
 
 export function corners(o: OrientedRect): Point[] {
   const r = (o.a * Math.PI) / 180;
@@ -248,11 +257,11 @@ export function distToSegment(p: Point, a: Point, b: Point): number {
   return dist(p, closestPointOnSegment(p, a, b));
 }
 
-/** Напрямок from → to прив'язується до кута, кратного stepDeg, довжина — до кроку сітки. */
-export function snapAngle(from: Point, to: Point, stepDeg: number): Point {
+/** Напрямок from → to прив'язується до кута, кратного stepDeg, довжина — до кроку сітки (або lenStep). */
+export function snapAngle(from: Point, to: Point, stepDeg: number, lenStep = SNAP_STEP): Point {
   const step = (stepDeg * Math.PI) / 180;
   const angle = Math.round(Math.atan2(to[1] - from[1], to[0] - from[0]) / step) * step;
-  const len = snap(dist(from, to));
+  const len = Math.round(dist(from, to) / lenStep) * lenStep;
   const round = (v: number) => Math.round(v * 100) / 100;
   return [round(from[0] + Math.cos(angle) * len), round(from[1] + Math.sin(angle) * len)];
 }
@@ -262,6 +271,36 @@ export function withLength(a: Point, b: Point, len: number): Point {
   const d = dist(a, b);
   if (d < EPS) return [a[0] + len, a[1]];
   return [a[0] + ((b[0] - a[0]) / d) * len, a[1] + ((b[1] - a[1]) / d) * len];
+}
+
+export interface EdgeAngle {
+  /** Стіна, на якій лежить точка from. */
+  edge: [Point, Point];
+  /** Кут від напрямку стіни a → b до відрізка from → to, 0–180°. */
+  angle: number;
+  /** З якого боку стіни лежить відрізок: 1 або -1. */
+  side: 1 | -1;
+}
+
+/** Кут між відрізком from → to і стіною, на якій лежить from; null — якщо from не на жодній стіні. */
+export function angleToEdge(from: Point, to: Point, edges: Array<[Point, Point]>, tol = 0.02): EdgeAngle | null {
+  const v: Point = [to[0] - from[0], to[1] - from[1]];
+  if (Math.hypot(v[0], v[1]) < EPS) return null;
+  for (const [a, b] of edges) {
+    if (dist(a, b) < EPS || distToSegment(from, a, b) > tol) continue;
+    const u: Point = [b[0] - a[0], b[1] - a[1]];
+    const c = u[0] * v[1] - u[1] * v[0];
+    const d = u[0] * v[0] + u[1] * v[1];
+    return { edge: [a, b], angle: Math.abs((Math.atan2(c, d) * 180) / Math.PI), side: c < 0 ? -1 : 1 };
+  }
+  return null;
+}
+
+/** Точка на відстані len від pivot під кутом deg до напрямку стіни a → b (з боку side). */
+export function pointAtEdgeAngle(pivot: Point, edge: [Point, Point], deg: number, side: 1 | -1, len: number): Point {
+  const base = Math.atan2(edge[1][1] - edge[0][1], edge[1][0] - edge[0][0]);
+  const r = base + (side * deg * Math.PI) / 180;
+  return [pivot[0] + Math.cos(r) * len, pivot[1] + Math.sin(r) * len];
 }
 
 export interface Bounds {
