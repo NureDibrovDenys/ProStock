@@ -2,20 +2,23 @@ import { useQuery } from '@tanstack/react-query';
 import type { User } from '../api/types';
 import { ROLE_LABELS, getUsers } from '../api/users';
 import { Button } from '../components/Button';
-import { Avatar, ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/ui';
+import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
 import { WAREHOUSE_ID } from '../config';
 import styles from './EmployeesPage.module.css';
 
 export function EmployeesPage() {
-  const query = useQuery({ queryKey: ['users', WAREHOUSE_ID], queryFn: () => getUsers(WAREHOUSE_ID) });
-  const users = query.data ?? [];
-  const onShift = users.filter((u) => u.on_shift);
+  const query = useQuery({
+    queryKey: ['users', WAREHOUSE_ID],
+    queryFn: () => getUsers({ warehouse_id: WAREHOUSE_ID, page_size: 100 }),
+  });
+  const users = query.data?.items ?? [];
+  const active = users.filter((u) => u.status === 'active');
 
   return (
     <>
       <PageHeader
         title="Співробітники"
-        subtitle={query.data ? `Усього ${users.length} · на зміні ${onShift.length}` : undefined}
+        subtitle={query.data ? `Усього ${query.data.total} · активних ${active.length}` : undefined}
         actions={<Button to="/employees/new">+ Додати співробітника</Button>}
       />
 
@@ -25,12 +28,12 @@ export function EmployeesPage() {
       {query.data && (
         <div className={styles.lists}>
           <section className={styles.onShift}>
-            <h2 className={styles.onShiftTitle}>На зміні зараз · {onShift.length}</h2>
-            {onShift.length === 0 ? (
-              <p className={styles.muted}>Зараз ніхто не на зміні</p>
+            <h2 className={styles.onShiftTitle}>Активні облікові записи · {active.length}</h2>
+            {active.length === 0 ? (
+              <p className={styles.muted}>Немає активних користувачів</p>
             ) : (
               <ul className={styles.chips}>
-                {onShift.map((u) => (
+                {active.map((u) => (
                   <li key={u.user_id} className={styles.chip}>
                     <Avatar firstName={u.first_name} lastName={u.last_name} size="sm" />
                     {u.first_name} {u.last_name}
@@ -69,7 +72,7 @@ function EmployeeRow({ user: u }: { user: User }) {
         <p className={styles.email}>{u.user_email}</p>
       </div>
       <p className={styles.position}>{u.position ?? ROLE_LABELS[u.role] ?? u.role}</p>
-      <StatusBadge onShift={u.on_shift} />
+      <UserStatusBadge status={u.status} />
     </li>
   );
 }

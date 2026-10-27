@@ -1,36 +1,35 @@
-import { ApiError, request } from './client';
-import type { Session } from './types';
+import { ApiError, request, setAccessToken } from './client';
+import type { AuthUser, Session } from './types';
 
 interface TokenResponse {
   access_token: string;
   token_type: string;
+  expires_in: number;
+  user: AuthUser;
 }
 
-/** POST /api/v1/auth/login — повертає JWT. */
+/** POST /api/v1/auth/login — вхід; refresh-токен приходить у httpOnly cookie. */
 export async function login(email: string, password: string): Promise<Session> {
-  const { access_token } = await request<TokenResponse>('/auth/login', {
+  const data = await request<TokenResponse>('/auth/login', {
     method: 'POST',
     body: { email, password },
+    auth: false,
   });
-  const session = sessionFromToken(access_token);
-  if (!session) throw new ApiError(500, 'Сервер повернув некоректний токен');
-  return session;
+  setAccessToken(data.access_token);
+  return { user: data.user, expiresAt: Date.now() + data.expires_in * 1000 };
 }
 
-/** Розбирає payload JWT (без перевірки підпису — це робить бекенд). */
-export function sessionFromToken(token: string): Session | null {
+/** POST /api/v1/auth/logout — відкликає refresh-токен на сервері. */
+export async function logout(): Promise<void> {
   try {
-    const payload = JSON.parse(decodeBase64Url(token.split('.')[1]));
-    const expiresAt = typeof payload.exp === 'number' ? payload.exp * 1000 : Number.POSITIVE_INFINITY;
-    if (expiresAt <= Date.now()) return null;
-    return { token, email: payload.sub ?? '', role: payload.role ?? '', expiresAt };
-  } catch {
-    return null;
+    await request('/auth/logout', { method: 'POST', auth: false });
+  } catch (error) {
+    // Навіть якщо сервер недоступний, локальну сесію треба скинути
+    if (!(error instanceof ApiError)) throw error;
+  } finally {
+    setAccessToken(null);
   }
 }
 
-function decodeBase64Url(value: string): string {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
+/** GET /api/v1/auth/me — актуальний профіль (роль, права, статус). */
+export const getProfile = () => request<AuthUser & { created_at: string }>('/auth/me');

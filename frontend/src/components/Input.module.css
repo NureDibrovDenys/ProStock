@@ -40,3 +40,8 @@
   font-size: 13px;
   color: var(--color-danger);
 }
+
+.hint {
+  font-size: 13px;
+  color: var(--color-muted);
+}

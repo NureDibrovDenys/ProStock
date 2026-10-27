@@ -164,6 +164,14 @@ export interface User {
   created_at: string;
 }
 
+export interface UserList {
+  items: User[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface NewUser {
   first_name: string;
   last_name: string;
@@ -173,11 +181,118 @@ export interface NewUser {
   warehouse_id: number;
 }
 
+// ── Товари ────────────────────────────────────────────────────────────────
+
+export type UnitOfMeasure = 'pcs' | 'kg' | 'pound' | 'box' | 'pallet' | 'other';
+
+export const UNIT_LABELS: Record<UnitOfMeasure, string> = {
+  pcs: 'шт',
+  kg: 'кг',
+  pound: 'фунт',
+  box: 'коробка',
+  pallet: 'палета',
+  other: 'інше',
+};
+
+export interface Category {
+  category_id: number;
+  name: string;
+  description: string | null;
+  products_count: number;
+}
+
+export interface Product {
+  product_id: number;
+  sku_code: string;
+  name: string;
+  category_id: number;
+  category_name: string | null;
+  unit_of_measure: UnitOfMeasure;
+  width: string;
+  length: string;
+  height: string;
+  weight: string;
+  min_stock_level: string | null;
+}
+
+export interface ProductList {
+  items: Product[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+/** Тіло запиту на створення / оновлення товару. */
+export interface ProductPayload {
+  sku_code: string;
+  name: string;
+  category_id: number;
+  unit_of_measure: UnitOfMeasure;
+  width: number;
+  length: number;
+  height: number;
+  weight: number;
+  min_stock_level: number | null;
+}
+
+export type ProductSortField = 'product_id' | 'sku_code' | 'name' | 'weight' | 'min_stock_level';
+
+export interface ProductQuery {
+  search?: string;
+  category_id?: number;
+  unit_of_measure?: UnitOfMeasure;
+  sort_by?: ProductSortField;
+  sort_order?: 'asc' | 'desc';
+  page?: number;
+  page_size?: number;
+}
+
+export interface ImportRowError {
+  row: number;
+  sku_code: string | null;
+  field: string | null;
+  message: string;
+}
+
+export interface ImportReport {
+  filename: string;
+  total: number;
+  created: number;
+  updated: number;
+  failed: number;
+  categories_created: number;
+  errors: ImportRowError[];
+}
+
 // ── Авторизація ───────────────────────────────────────────────────────────
 
+export type Permission =
+  | 'products_read'
+  | 'products_write'
+  | 'products_delete'
+  | 'products_import'
+  | 'products_export'
+  | 'users_manage'
+  | 'warehouse_map_write';
+
+export interface AuthUser {
+  user_id: number;
+  user_email: string;
+  first_name: string;
+  last_name: string;
+  role: RoleName | 'guest';
+  status: UserStatus;
+  permissions: Record<Permission, boolean>;
+}
+
+export interface Profile extends AuthUser {
+  created_at: string;
+}
+
+/** Клієнтська сесія: access-токен зберігається лише в памʼяті модуля. */
 export interface Session {
-  token: string;
-  email: string;
-  role: string;
+  user: AuthUser;
+  /** Момент (ms), коли access-токен перестане діяти. */
   expiresAt: number;
 }

@@ -47,3 +47,19 @@ a {
   outline: 2px solid var(--color-highlight);
   outline-offset: 2px;
 }
+
+/* Утиліта для індикаторів завантаження (SVG-іконки) */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Модальні вікна: блокуємо прокрутку фону */
+body.modal-open {
+  overflow: hidden;
+}

@@ -41,6 +41,20 @@ export function StatusBadge({ onShift }: { onShift: boolean }) {
   );
 }
 
+const USER_STATUS_LABELS = {
+  active: 'Активний',
+  inactive: 'Неактивний',
+  blocked: 'Заблокований',
+} as const;
+
+export function UserStatusBadge({ status }: { status: keyof typeof USER_STATUS_LABELS }) {
+  return (
+    <span className={cx(styles.badge, status === 'active' ? styles.badgeOn : styles.badgeOff)}>
+      {USER_STATUS_LABELS[status] ?? status}
+    </span>
+  );
+}
+
 /** Поріг, з якого заповненість вважається критичною й підсвічується червоним. */
 export const CRITICAL_FILL = 90;
 

@@ -1,179 +1,235 @@
-# API, яке очікує веб-панель ProStock
+# API ProStock, яке очікує веб-панель
 
-Базовий префікс: `/api/v1`. Формат — JSON. Авторизація — заголовок `Authorization: Bearer <JWT>`
-(поки вхід на фронті вимкнений, токен може не надсилатися).
+Базовий префікс: `/api/v1`. Формат — JSON. Авторизація — заголовок
+`Authorization: Bearer <access_token>`.
 
-Імена полів і значення enum узгоджені з `backend/app/*/models.py` та `backend/app/core/enums.py`.
-TypeScript-типи — `src/api/types.ts`, виклики — `src/api/*.ts`.
-
-| Метод | Шлях | Екран | Статус на бекенді |
-|---|---|---|---|
-| POST | `/auth/login` | Вхід | ✅ є |
-| GET | `/warehouses/{id}` | назва складу в заголовках | ❌ |
-| GET | `/warehouses/{id}/map` | Склад, Конструктор | ⚠️ є, але старий формат |
-| PUT | `/warehouses/{id}/map` | Конструктор | ⚠️ є, але старий формат |
-| GET | `/warehouses/{id}/racks` | Склад (заповненість стелажів) | ❌ |
-| GET | `/warehouses/{id}/racks/{rack_code}` | Стелаж | ❌ |
-| GET | `/warehouses/{id}/dashboard` | Головна | ❌ |
-| GET | `/users?warehouse_id={id}` | Співробітники | ❌ |
-| POST | `/users` | Новий співробітник | ❌ |
-
-Помилки — стандартні для FastAPI: `{"detail": "текст"}` або список помилок валідації.
-Текст із `detail` показується користувачу як є, тому краще писати його українською.
+Помилки — стандартні для FastAPI: `{"detail": "текст"}` або список помилок
+валідації. Текст із `detail` показується користувачу як є.
 
 ---
 
-## POST /auth/login
+## Авторизація
+
+Схема сесії:
+
+- **access-токен** (JWT, 15 хв) повертається в тілі відповіді. Фронтенд тримає його
+  лише в памʼяті — не в `localStorage`;
+- **refresh-токен** (JWT, 7 днів) передається в **httpOnly cookie**
+  `prostock_refresh` з `Path=/api/v1/auth`, `SameSite=Lax`. JS до нього доступу не має;
+- кожен refresh **ротується**: старий токен відкликається, видається новий;
+- у БД зберігається лише SHA-256 хеш refresh-токена.
+
+| Метод | Шлях | Опис |
+|---|---|---|
+| POST | `/auth/login` | Вхід, видає access + refresh |
+| POST | `/auth/refresh` | Новий access за refresh-cookie |
+| POST | `/auth/logout` | Відкликає refresh, чистить cookie |
+| GET | `/auth/me` | Профіль, роль і права поточного користувача |
+
+### POST /auth/login
 
 ```json
 // запит
-{ "email": "admin@prostock.com", "password": "admin123" }
-// відповідь 200
-{ "access_token": "<JWT>", "token_type": "bearer" }
+{ "email": "admin@prostock.com", "password": "Admin12345" }
+// відповідь 200 + Set-Cookie: prostock_refresh=…; HttpOnly; Path=/api/v1/auth
+{
+  "access_token": "<JWT>",
+  "token_type": "bearer",
+  "expires_in": 900,
+  "user": {
+    "user_id": 1,
+    "user_email": "admin@prostock.com",
+    "first_name": "Адмін",
+    "last_name": "Системи",
+    "role": "administrator",
+    "status": "active",
+    "permissions": {
+      "products_read": true, "products_write": true, "products_delete": true,
+      "products_import": true, "products_export": true,
+      "users_manage": true, "warehouse_map_write": true
+    }
+  }
+}
 ```
-У payload JWT фронт читає `sub` (email), `role`, `exp`. Невірні дані — `401`.
 
-## GET /warehouses/{id}
+Помилки: `401` — невірний email або пароль (однакова відповідь для обох випадків),
+`403` — обліковий запис заблоковано, `422` — некоректний формат полів,
+`429` — забагато спроб входу (заголовок `Retry-After`).
+
+### GET /auth/me
+
+Повертає той самий об'єкт `user` + `created_at`. Використовується для перевірки,
+що сесія ще дійсна.
+
+---
+
+## Права доступу (RBAC)
+
+| Дія | root | administrator | warehouse_manager | storekeeper | guest |
+|---|---|---|---|---|---|
+| Читання товарів / експорт | + | + | + | + | + |
+| Створення / редагування товарів | + | + | + | – | – |
+| Видалення товарів | + | + | – | – | – |
+| Імпорт товарів | + | + | + | – | – |
+| Керування користувачами | + | + | – | – | – |
+| Редагування мапи складу | + | + | + | – | – |
+
+Перевірка виконується на бекенді (не лише в UI). Статус користувача перевіряється
+на кожному запиті: заблокований втрачає доступ негайно, навіть із дійсним access-токеном.
+
+---
+
+## Користувачі
+
+| Метод | Шлях | Права |
+|---|---|---|
+| GET | `/users?search=&role=&status=&page=&page_size=` | root, administrator |
+| POST | `/users` | root, administrator |
+| GET | `/users/{id}` | root, administrator |
+| PATCH | `/users/{id}` | root, administrator |
+| DELETE | `/users/{id}` | root, administrator |
 
 ```json
-{ "warehouse_id": 1, "warehouse_name": "А-01", "warehouse_address": null, "total_warehouse_area": 1000.0 }
+// POST /users
+{
+  "first_name": "Іван",
+  "last_name": "Петренко",
+  "user_email": "i.petrenko@prostock.ua",
+  "password": "Temp12345",
+  "role": "storekeeper",
+  "warehouse_id": 1
+}
 ```
 
-## GET / PUT /warehouses/{id}/map
-
-Топологія складу з конструктора. **Одиниці — метри.** `coord_x`/`coord_y` — **центр** об'єкта.
-`length` — розмір уздовж власної осі X об'єкта (до повороту), `width` — уздовж осі Y.
-`rotation_angle` — градуси за годинниковою стрілкою.
-
-PUT повністю замінює топологію: об'єкти з `*_id` оновлюються, без `*_id` створюються,
-відсутні у запиті видаляються. Відповідь на PUT — збережена мапа з `*_id` нових об'єктів
-(щоб наступне збереження не створювало дублікати).
+Роль: `root | administrator | warehouse_manager | storekeeper | guest`.
+Пароль: 8–128 символів, велика й мала літери, цифра (перевіряється і на фронті, і на сервері).
+Відповідь — елемент списку:
 
 ```json
 {
-  "walls": [
-    { "vertex_order": 1, "coord_x": 0, "coord_y": 0 },
-    { "vertex_order": 2, "coord_x": 30, "coord_y": 0 },
-    { "vertex_order": 3, "coord_x": 30, "coord_y": 20 },
-    { "vertex_order": 4, "coord_x": 0, "coord_y": 20 }
-  ],
-  "partitions": [
-    { "partition_id": 5, "start_x": 15, "start_y": 0, "end_x": 15, "end_y": 12, "thickness": 0.2, "height": null }
-  ],
-  "racks": [
-    { "rack_id": 7, "rack_code": "R-1", "coord_x": 8, "coord_y": 5, "length": 2.7, "width": 1.1,
-      "rotation_angle": 0, "shelves_count": 3 }
-  ],
-  "obstacles": [
-    { "obstacle_id": 2, "obstacle_name": "Колона", "obstacle_type": "column", "coord_x": 16, "coord_y": 11,
-      "length": 2, "width": 2, "rotation_angle": 0, "max_height": null }
-  ],
-  "zones": [
-    { "zone_id": 3, "zone_name": "Зона приймання", "zone_type": "inbound_dock", "coord_x": 25, "coord_y": 5,
-      "length": 6, "width": 6, "rotation_angle": 0, "max_capacity_m3": null }
-  ],
-  "entry_points": [
-    { "point_id": 1, "point_name": "Вхід", "point_type": "general_entry", "coord_x": 15, "coord_y": 20 }
+  "user_id": 5, "user_email": "i.petrenko@prostock.ua",
+  "first_name": "Іван", "last_name": "Петренко",
+  "role": "storekeeper", "status": "active",
+  "position": null, "on_shift": false,
+  "created_at": "2026-10-26T13:40:00Z"
+}
+```
+
+Список — `{ "items": [...], "total": 12, "page": 1, "page_size": 20, "pages": 1 }`.
+
+Помилки: `409` — email зайнятий / спроба видалити себе / останній адміністратор.
+
+---
+
+## Товари
+
+| Метод | Шлях | Права |
+|---|---|---|
+| GET | `/products` | будь-який автентифікований |
+| POST | `/products` | root, administrator, warehouse_manager |
+| GET | `/products/{id}` | будь-який автентифікований |
+| PATCH | `/products/{id}` | root, administrator, warehouse_manager |
+| DELETE | `/products/{id}` | root, administrator |
+| POST | `/products/import` | root, administrator, warehouse_manager |
+| GET | `/products/import/template?format=csv\|xlsx` | будь-який автентифікований |
+| GET | `/products/export?format=csv\|xlsx` | будь-який автентифікований |
+
+### GET /products
+
+Параметри: `search` (SKU або назва), `category_id`, `unit_of_measure`,
+`sort_by` (`product_id|sku_code|name|weight|min_stock_level`), `sort_order` (`asc|desc`),
+`page`, `page_size` (1–200).
+
+```json
+{
+  "items": [{
+    "product_id": 1, "sku_code": "CHEM-001", "name": "Мило рідке, 1 л",
+    "category_id": 1, "category_name": "Побутова хімія",
+    "unit_of_measure": "pcs",
+    "width": "0.10", "length": "0.10", "height": "0.25",
+    "weight": "1.100", "min_stock_level": "10.00"
+  }],
+  "total": 42, "page": 1, "page_size": 20, "pages": 3
+}
+```
+
+`unit_of_measure`: `pcs | kg | pound | box | pallet | other`.
+Габарити — метри, вага — кілограми.
+
+Помилки: `409` — SKU вже існує, `422` — некоректні поля або категорія.
+
+### POST /products/import
+
+`multipart/form-data`, поле `file` — `.csv` або `.xlsx`, до 5 МБ, до 5000 рядків.
+
+Колонки (регістр не важливий, підтримуються українські назви):
+`sku_code, name, category, unit_of_measure, width, length, height, weight, min_stock_level`.
+
+- категорія вказується назвою; невідома створюється автоматично;
+- існуючий `sku_code` оновлюється, новий — створюється;
+- коректні рядки зберігаються навіть якщо інші містять помилки.
+
+```json
+{
+  "filename": "products.csv",
+  "total": 5, "created": 2, "updated": 1, "failed": 2,
+  "categories_created": 1,
+  "errors": [
+    { "row": 4, "sku_code": "BAD-001", "field": "width", "message": "Некоректне число" },
+    { "row": 6, "sku_code": "", "field": "sku_code", "message": "Поле не може бути порожнім" }
   ]
 }
 ```
 
-- `walls` — вершини контуру приміщення (модель `WarehouseWall`), полігон замикається автоматично.
-  Вершини стоять по **внутрішній грані** стіни (площа полігона = корисна площа). Фронт надсилає
-  контур нормалізованим: без самоперетинів, без повторених і колінеарних вершин, знакова площа
-  (формула шнурування за `vertex_order`) додатна. Бекенду варто перевіряти те саме й повертати `422`.
-- `partitions` — внутрішні перегородки: відрізок по осьовій лінії стіни від `start` до `end`,
-  `thickness` — товщина (за замовчуванням 0.2), `height: null` — до стелі. Довжина й кут не
-  передаються — вони обчислюються з координат.
-- `obstacle_type`: `column | pillar | niche | restricted_zone | other`.
-- `zone_type`: `inbound_dock | storage_area | outbound_dock`.
-- `point_type`: `inbound | outbound | general_entry`.
-- Порожній склад: усі масиви порожні (`200`, а не `404`).
+`row` — номер рядка у файлі (заголовок = 1). Помилки структури файлу → `422`,
+завеликий файл → `413`.
 
-**Що треба змінити на бекенді:**
-1. `app/schemas.py` — `WarehouseMapUpdateSchema` зараз чекає `walls` як відрізки `{x1,y1,x2,y2}`
-   і не має `obstacles` / `entry_points` / `partitions`. Потрібно привести до формату вище.
-2. Нова модель `WarehousePartition`:
-   `partition_id` BIGINT PK · `warehouse_id` FK → warehouse (CASCADE, index) ·
-   `start_x`, `start_y`, `end_x`, `end_y` NUMERIC(8,2) not null ·
-   `thickness` NUMERIC(5,2) not null default 0.20, CHECK > 0 ·
-   `height` NUMERIC(8,2) null, CHECK `height IS NULL OR height > 0` ·
-   CHECK ненульова довжина: `start_x <> end_x OR start_y <> end_y`.
-3. `Zone` і `WarehouseObstacle` — бракує `rotation_angle` (у `Rack` уже є).
-4. `Rack` — `UniqueConstraint(warehouse_id, rack_code)` (фронт зіставляє стелажі за кодом);
-   `shelves_count` дублює кількість рядків `Shelf` — краще рахувати.
-5. `Shelf` — додати `level` (номер ярусу знизу, потрібен для FR-5.4 «важке — вниз»);
-   `is_occupied` і статус `occupied` — похідні від розміщеної тари, їх краще не зберігати.
-6. `WarehouseGrid` — не потрібна: крок сітки — налаштування редактора, межі — з контуру.
-7. Одиниці: координати й розміри на мапі — метри; фізичні габарити полиць/товарів/тари — домовитися
-   (зараз `Shelf.total_volume_m3` рахує з мм).
-8. `@validates(...)` у моделях приймає ім'я **атрибута** (`"width"`), а не колонки (`"zone_width"`),
-   інакше валідатор не викликається; для nullable-полів перевіряти `None` перед `<= 0`.
+### GET /products/export
 
-## GET /warehouses/{id}/racks
+Повертає файл `products_YYYYMMDD_HHMMSS.csv` (UTF-8 BOM, `;`) або `.xlsx`.
+Ті самі фільтри, що й у списку. Заголовок `X-Total-Count` — кількість рядків.
+
+---
+
+## Категорії
+
+| Метод | Шлях | Права |
+|---|---|---|
+| GET | `/categories` | будь-який автентифікований |
+| POST | `/categories` | root, administrator, warehouse_manager |
+| PATCH | `/categories/{id}` | root, administrator, warehouse_manager |
+| DELETE | `/categories/{id}` | root, administrator |
 
 ```json
-[ { "rack_id": 7, "rack_code": "R-1", "shelves_count": 3, "fill_percent": 68 } ]
+[ { "category_id": 1, "name": "Побутова хімія", "description": null, "products_count": 2 } ]
 ```
-`fill_percent` — 0…100, ціле. Стелаж зіставляється з мапою за `rack_code`.
 
-## GET /warehouses/{id}/racks/{rack_code}
+Видалити категорію з товарами не можна (`409`).
 
-```json
-{
-  "rack_id": 7,
-  "rack_code": "R-1",
-  "zone_name": "Зона зберігання",
-  "updated_at": "2026-10-23T09:42:00Z",
-  "shelves": [
-    { "shelf_id": 21, "shelf_code": "R-1-1", "product_name": "Цукор, 50 кг",
-      "occupied": 8, "capacity": 10, "shelf_status": "occupied" }
-  ]
-}
-```
-`occupied` / `capacity` — у палетомісцях. `shelf_status`: `active | occupied | inactive`.
-`zone_name` і `product_name` можуть бути `null`. Невідомий стелаж — `404` з `detail`.
+---
 
-## GET /warehouses/{id}/dashboard
+## Склад (залишено з попереднього етапу)
 
-```json
-{
-  "racks_count": 12,
-  "zones_count": 3,
-  "fill_percent": 68,
-  "fill_change_week": 4,
-  "on_shift": 5,
-  "employees_total": 12,
-  "free_area_m2": 320,
-  "total_area_m2": 1000,
-  "updated_at": "2026-10-23T09:00:00Z",
-  "rack_fill": [ { "rack_id": 7, "rack_code": "R-1", "fill_percent": 68 } ],
-  "recent_operations": [
-    { "log_id": 101, "timestamp": "2026-10-23T09:42:00Z", "action": "Прийнято 40 коробок → R-3" }
-  ]
-}
-```
-`recent_operations` — останні ~6 записів `AuditLog`, новіші першими.
+| Метод | Шлях | Статус |
+|---|---|---|
+| GET | `/warehouses/{id}/map` | тимчасово зберігається в памʼяті процесу |
+| PUT | `/warehouses/{id}/map` | те саме; відповідь — збережена мапа з `*_id` нових об'єктів |
 
-## GET /users?warehouse_id={id}
+Формат мапи — `WarehouseMapUpdateSchema` у `backend/app/schemas.py` (приклад — у Swagger):
+метри, `coord_x`/`coord_y` — центр об'єкта, `rotation_angle` — градуси за годинниковою стрілкою [0, 360).
+`walls` — вершини контуру з `vertex_order` (простий полігон, площа > 0), `partitions` — перегородки
+`start_x/start_y/end_x/end_y/thickness/height`, далі `racks`, `obstacles`, `zones`, `entry_points`.
+Об'єкти з `*_id` зберігають його, без `*_id` — отримують новий. Числа віддаються числами.
+| GET | `/warehouses/{id}`, `/dashboard`, `/racks` | ще не реалізовано |
 
-```json
-[
-  { "user_id": 1, "user_email": "i.petrenko@prostock.ua", "first_name": "Іван", "last_name": "Петренко",
-    "role": "storekeeper", "status": "active", "position": "Водій навантажувача", "on_shift": true,
-    "created_at": "2026-10-01T08:00:00Z" }
-]
-```
-- `role`: `root | administrator | warehouse_manager | storekeeper`.
-- `position` — посада для відображення; якщо `null`, фронт покаже назву ролі. У моделі `User` такого поля поки немає.
-- `on_shift` — чи на зміні зараз. Обліку змін у моделях поки немає.
+Усі ці ендпоінти вимагають авторизації; запис мапи — root / administrator / warehouse_manager.
 
-## POST /users
+---
 
-```json
-// запит
-{ "first_name": "Іван", "last_name": "Петренко", "user_email": "i.petrenko@prostock.ua",
-  "password": "********", "role": "storekeeper", "warehouse_id": 1 }
-// відповідь 201 — створений користувач у форматі як у GET /users
-```
-Зайнятий email — `409` з `detail`. За SRS (FR-1.4) пароль має бути тимчасовим і змінюватися при першому вході.
+## Службові
+
+| Метод | Шлях | Опис |
+|---|---|---|
+| GET | `/` | перевірка, що API працює |
+| GET | `/health` | стан API та підключення до БД |
+| GET | `/docs` | Swagger UI |
