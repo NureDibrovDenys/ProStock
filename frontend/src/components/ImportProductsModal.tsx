@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Loader, UploadCloud, X } from 'lucide-react';
-import { useRef, useState, type DragEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { downloadImportTemplate, importProducts } from '../api/products';
 import { downloadBlob } from '../api/client';
 import type { ImportReport } from '../api/types';
@@ -9,6 +9,8 @@ import styles from './ImportProductsModal.module.css';
 
 const MAX_SIZE_MB = 5;
 const ALLOWED = ['.csv', '.xlsx'];
+/** Скільки рядків помилок малювати в таблиці; повний список завжди є у CSV-звіті. */
+const MAX_VISIBLE_ERRORS = 200;
 
 interface ImportProductsModalProps {
   onClose: () => void;
@@ -30,7 +32,7 @@ function extensionOf(name: string): string {
 function downloadErrorReport(report: ImportReport) {
   const escape = (value: string | number | null) => {
     const text = value === null ? '' : String(value);
-    return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    return /[";\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
   const rows = [
     ['row', 'sku_code', 'field', 'message'],
@@ -42,6 +44,8 @@ function downloadErrorReport(report: ImportReport) {
 
 export function ImportProductsModal({ onClose, onImported }: ImportProductsModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // dragenter/dragleave спрацьовують і на дочірніх елементах зони, тому рахуємо «глибину»
+  const dragDepth = useRef(0);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,24 +71,72 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
     setFile(candidate);
   };
 
+  const openPicker = () => {
+    if (!uploading) inputRef.current?.click();
+  };
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (uploading) return;
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault(); // без цього drop не спрацює
+    event.dataTransfer.dropEffect = uploading ? 'none' : 'copy';
+  };
+
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    dragDepth.current = 0;
     setDragging(false);
+    if (uploading) return; // не підміняємо файл, поки йде імпорт
     pickFile(event.dataTransfer.files?.[0] ?? null);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // події з вкладених елементів (кнопка «Прибрати файл») не повинні відкривати діалог
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault(); // пробіл не має прокручувати сторінку
+      openPicker();
+    }
+  };
+
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    pickFile(event.target.files?.[0] ?? null);
+    // скидаємо значення, щоб той самий файл можна було вибрати повторно
+    event.target.value = '';
   };
 
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
     setError(null);
+
+    let result: ImportReport;
     try {
-      const result = await importProducts(file);
-      setReport(result);
-      onImported(result);
+      result = await importProducts(file);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не вдалося імпортувати файл');
+      return;
     } finally {
       setUploading(false);
+    }
+
+    setReport(result);
+    // збій оновлення таблиці не повинен виглядати як невдалий імпорт
+    try {
+      onImported(result);
+    } catch (err) {
+      console.error('onImported failed', err);
     }
   };
 
@@ -99,6 +151,8 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
     if (uploading) return;
     onClose();
   };
+
+  const hiddenErrors = report ? Math.max(0, report.errors.length - MAX_VISIBLE_ERRORS) : 0;
 
   return (
     <Modal
@@ -145,18 +199,15 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
         <div className={styles.content}>
           <div
             className={`${styles.dropzone} ${dragging ? styles.dragging : ''} ${file ? styles.hasFile : ''}`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
             onDrop={handleDrop}
-            onClick={() => !uploading && inputRef.current?.click()}
+            onClick={openPicker}
+            onKeyDown={handleKeyDown}
             role="button"
-            tabIndex={0}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') inputRef.current?.click();
-            }}
+            tabIndex={uploading ? -1 : 0}
+            aria-disabled={uploading}
             aria-label="Оберіть файл для імпорту"
           >
             <input
@@ -164,8 +215,9 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
               type="file"
               accept=".csv,.xlsx"
               className={styles.hiddenInput}
-              onChange={(event) => pickFile(event.target.files?.[0] ?? null)}
+              onChange={handleInputChange}
               disabled={uploading}
+              tabIndex={-1}
             />
 
             {file ? (
@@ -297,7 +349,7 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
                     </tr>
                   </thead>
                   <tbody>
-                    {report.errors.map((item, index) => (
+                    {report.errors.slice(0, MAX_VISIBLE_ERRORS).map((item, index) => (
                       <tr key={`${item.row}-${item.field}-${index}`}>
                         <td className={styles.rowNumber}>{item.row}</td>
                         <td>{item.sku_code || '—'}</td>
@@ -308,6 +360,12 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
                   </tbody>
                 </table>
               </div>
+
+              {hiddenErrors > 0 && (
+                <p className={styles.note}>
+                  Показано перші {MAX_VISIBLE_ERRORS} помилок, ще {hiddenErrors} — лише у звіті CSV.
+                </p>
+              )}
             </>
           )}
         </div>
