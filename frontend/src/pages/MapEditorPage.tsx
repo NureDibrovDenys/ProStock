@@ -11,16 +11,22 @@ import { MapLayers } from '../components/map/MapLayers';
 import { ZoomControls } from '../components/map/ZoomControls';
 import mapStyles from '../components/map/map.module.css';
 import {
+  FINE_STEP,
+  angleToEdge,
   closestPointOnSegment,
   dist,
   isSimplePolygon,
   movePolygonEdge,
+  normalizeAngle,
+  pointAtEdgeAngle,
   polygonArea,
   polygonSignedArea,
   segmentsTouch,
   snap,
   snapAngle,
+  snapFine,
   withLength,
+  type EdgeAngle,
   type Point,
 } from '../components/map/geometry';
 import {
@@ -54,8 +60,8 @@ import styles from './MapEditorPage.module.css';
 type Tool = 'select' | 'pan' | 'wall' | 'partition' | ShapeKind;
 
 const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
-  { id: 'select', key: 'V', name: 'Вибір', icon: '↖' },
   { id: 'pan', key: 'H', name: 'Рука', icon: '✥' },
+  { id: 'select', key: 'V', name: 'Вибір', icon: '↖' },
   { id: 'wall', key: 'W', name: 'Контур', icon: '⬡' },
   { id: 'partition', key: 'P', name: 'Перегор.', icon: '┃' },
   { id: 'rack', key: 'R', name: 'Стелаж', icon: '▤' },
@@ -68,10 +74,11 @@ const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
 
 const HINTS: Record<Tool, string> = {
   select:
-    'Клік — вибір · перетягування — переміщення · контур: тягніть вершину, «+» — нова вершина, ребро — зсув · Q — поворот · Del — видалити · Ctrl+Z — скасувати',
+    'Клік — вибір · перетягування — переміщення · ⟳ над об’єктом — поворот (Shift — без кроку 15°) · контур: тягніть вершину, «+» — нова вершина, ребро — зсув · Del — видалити · Ctrl+Z — скасувати',
   pan: 'Перетягуйте, щоб рухати полотно (також: середня кнопка або Пробіл)',
   wall: 'Клік — вершина контуру · Shift — кут 45°/90° · Backspace — прибрати останню · Enter або клік на першу точку — замкнути · Esc — скасувати',
-  partition: 'Клік — початок, клік — кінець (далі ланцюжком) · прив’язка до стін і вершин · Shift — кут 45°/90° · Enter — новий ланцюжок · Esc — вийти',
+  partition:
+    'Клік — початок, клік — кінець (далі ланцюжком) · без сітки, з прив’язкою до стін і вершин · біля стіни показано кут до неї · Shift — кут 45°/90° · Enter — новий ланцюжок · Esc — вийти',
   rack: 'Клік — поставити стелаж за пресетом · потягніть — власний розмір (кількість полиць із пресету)',
   obst: 'Затисніть і потягніть, щоб додати перешкоду (колона, ніша, техзона)',
   zin: 'Затисніть і потягніть, щоб задати зону приймання',
@@ -88,6 +95,10 @@ const MAGNET_PX = 10;
 const HISTORY_LIMIT = 100;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Ручне введення — не більше 3 знаків після коми. */
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+/** Поворот ручкою: крок 15°, із Shift — 0,5°. */
+const ROTATE_STEP = 15;
 
 export function MapEditorPage() {
   const query = useQuery({
@@ -129,7 +140,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const warehouseName = useWarehouseName();
 
   const [objs, setObjsRaw] = useState<MapObject[]>(initial);
-  const [tool, setTool] = useState<Tool>('select');
+  const [tool, setTool] = useState<Tool>('pan');
   const [sel, setSel] = useState<string | null>(null);
   const [selVertex, setSelVertex] = useState<number | null>(null);
   const [poly, setPoly] = useState<Point[]>([]);
@@ -148,6 +159,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const wallDrag = useRef<WallDrag | null>(null);
   const vertexDrag = useRef<number | null>(null);
   const partDrag = useRef<PartitionDrag | null>(null);
+  const rotateDrag = useRef<string | null>(null);
   const space = useRef(false);
   const msgTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -295,13 +307,14 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
   /**
    * Пріоритет: вершини та кінці перегородок → кут від попередньої точки (Shift) → стіни →
-   * вирівнювання по осях з вершинами → сітка.
+   * вирівнювання по осях з вершинами → сітка (або 1 см, якщо fine — для перегородок).
    */
   const snapPoint = (
     raw: Point,
-    opts: { from?: Point | null; ortho?: boolean; edges?: boolean; align?: boolean; ex?: MagnetExclude } = {},
+    opts: { from?: Point | null; ortho?: boolean; edges?: boolean; align?: boolean; fine?: boolean; ex?: MagnetExclude } = {},
   ): Point => {
     const ex = opts.ex ?? {};
+    const grid = opts.fine ? snapFine : snap;
     let best: Point | null = null;
     let bestDist = MAGNET_PX / k;
     for (const v of magnetVertices(ex)) {
@@ -312,7 +325,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       }
     }
     if (best) return best;
-    if (opts.ortho && opts.from) return snapAngle(opts.from, raw, 45);
+    if (opts.ortho && opts.from) return snapAngle(opts.from, raw, 45, opts.fine ? FINE_STEP : undefined);
     if (opts.edges) {
       for (const [a, b] of magnetEdges(ex)) {
         const c = closestPointOnSegment(raw, a, b);
@@ -337,9 +350,9 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
           }
         }
       }
-      return [aligned[0] ?? snap(raw[0]), aligned[1] ?? snap(raw[1])];
+      return [aligned[0] ?? grid(raw[0]), aligned[1] ?? grid(raw[1])];
     }
-    return [snap(raw[0]), snap(raw[1])];
+    return [grid(raw[0]), grid(raw[1])];
   };
 
   /** Пунктирні напрямні від найближчих вершин, з якими точка лежить на одній вертикалі/горизонталі. */
@@ -359,7 +372,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   /** Точка під курсором з урахуванням прив'язки поточного інструмента. */
   const toolPoint = (raw: Point, shift: boolean): Point => {
     if (tool === 'wall') return snapPoint(raw, { from: poly[poly.length - 1], ortho: shift, align: true });
-    if (tool === 'partition') return snapPoint(raw, { from: chainStart, ortho: shift, edges: true, align: true });
+    if (tool === 'partition') return snapPoint(raw, { from: chainStart, ortho: shift, edges: true, align: true, fine: true });
     return [snap(raw[0]), snap(raw[1])];
   };
 
@@ -423,7 +436,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       const lower = key.toLowerCase();
       if (lower === 'q' && s.sel) {
         const step = e.shiftKey ? -15 : 15;
-        setObjs((os) => os.map((o) => (o.id === s.sel && isShape(o) ? { ...o, a: (o.a + step + 360) % 360 } : o)));
+        setObjs((os) => os.map((o) => (o.id === s.sel && isShape(o) ? { ...o, a: normalizeAngle(o.a + step) } : o)));
         return;
       }
       const t = TOOLS.find((x) => x.key.toLowerCase() === lower);
@@ -480,6 +493,8 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
           vertexDrag.current = index + 1;
         } else if ((kind === 'start' || kind === 'end') && handle.dataset.part) {
           partDrag.current = { id: handle.dataset.part, mode: kind };
+        } else if (kind === 'rotate' && sel) {
+          rotateDrag.current = sel;
         }
         capture();
         return;
@@ -564,6 +579,17 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
     if (vp.movePan(e)) return;
 
+    const rid = rotateDrag.current;
+    if (rid) {
+      const o = objs.find((x) => x.id === rid);
+      if (!o || !isShape(o)) return;
+      // Ручка стоїть над об'єктом (локальна вісь -Y), тож кут рахуємо від вертикалі
+      const raw = (Math.atan2(p[0] - o.x, o.y - p[1]) * 180) / Math.PI;
+      const a = normalizeAngle(e.shiftKey ? Math.round(raw * 2) / 2 : Math.round(raw / ROTATE_STEP) * ROTATE_STEP);
+      if (a !== o.a) upd(rid, { a }, 'drag');
+      return;
+    }
+
     const wall = wallDrag.current;
     if (wall && room) {
       const distance = snap((p[0] - wall.start[0]) * wall.normal[0] + (p[1] - wall.start[1]) * wall.normal[1]);
@@ -586,8 +612,8 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       const part = objs.find((o) => o.id === pd.id);
       if (!part || !isPartition(part)) return;
       if (pd.mode === 'move') {
-        const dx = snap(p[0] - pd.origin[0]);
-        const dy = snap(p[1] - pd.origin[1]);
+        const dx = snapFine(p[0] - pd.origin[0]);
+        const dy = snapFine(p[1] - pd.origin[1]);
         if (dist([pd.start0[0] + dx, pd.start0[1] + dy], part.start) < 1e-9) return;
         updPartition(
           pd.id,
@@ -596,7 +622,14 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
         );
       } else {
         const other = pd.mode === 'start' ? part.end : part.start;
-        const q = snapPoint(p, { from: other, ortho: e.shiftKey, edges: true, align: true, ex: { partitionId: pd.id } });
+        const q = snapPoint(p, {
+          from: other,
+          ortho: e.shiftKey,
+          edges: true,
+          align: true,
+          fine: true,
+          ex: { partitionId: pd.id },
+        });
         if (dist(q, other) >= MIN_PARTITION_LENGTH) updPartition(pd.id, pd.mode === 'start' ? { start: q } : { end: q }, 'drag');
         setCur(q);
       }
@@ -618,6 +651,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     wallDrag.current = null;
     vertexDrag.current = null;
     partDrag.current = null;
+    rotateDrag.current = null;
     pendingCheckpoint.current = false;
     if (!draft) return;
 
@@ -699,7 +733,31 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     if (dirty && !window.confirm('Є незбережені зміни. Вийти з конструктора?')) e.preventDefault();
   };
 
+  // ── Кут перегородки до стіни ─────────────────────────────────────────────
+
+  /** Кут до стіни біля початку перегородки, а якщо початок вільний — біля кінця. */
+  const partitionWallAngle = (p: PartitionObject): { end: 'start' | 'end'; info: EdgeAngle } | null => {
+    const edges = magnetEdges({ partitionId: p.id });
+    const atStart = angleToEdge(p.start, p.end, edges);
+    if (atStart) return { end: 'start', info: atStart };
+    const atEnd = angleToEdge(p.end, p.start, edges);
+    return atEnd ? { end: 'end', info: atEnd } : null;
+  };
+
+  /** Повертає перегородку навколо кінця, прикріпленого до стіни, зберігаючи довжину. */
+  const setPartitionWallAngle = (p: PartitionObject, deg: number) => {
+    const wa = partitionWallAngle(p);
+    if (!wa) return;
+    const pivot = p[wa.end];
+    const other = pointAtEdgeAngle(pivot, wa.info.edge, Math.min(180, Math.max(0, deg)), wa.info.side, dist(p.start, p.end));
+    updPartition(p.id, wa.end === 'start' ? { end: other } : { start: other });
+  };
+
   // ── Рендер ───────────────────────────────────────────────────────────────
+
+  const selectedWallAngle = selected && isPartition(selected) ? partitionWallAngle(selected) : null;
+  const chainWallAngle =
+    tool === 'partition' && chainStart && dist(chainStart, cur) > 1e-6 ? angleToEdge(chainStart, cur, magnetEdges({})) : null;
 
   const dw = draft ? Math.abs(draft.x1 - draft.x0) : 0;
   const dh = draft ? Math.abs(draft.y1 - draft.y0) : 0;
@@ -876,6 +934,14 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
                   >
                     {dist(selected.start, selected.end).toFixed(2)} м
                   </text>
+                  {selectedWallAngle && (
+                    <AngleMark
+                      at={selected[selectedWallAngle.end]}
+                      to={selected[selectedWallAngle.end === 'start' ? 'end' : 'start']}
+                      info={selectedWallAngle.info}
+                      k={k}
+                    />
+                  )}
                   {(['start', 'end'] as const).map((end) => (
                     <circle
                       key={end}
@@ -949,7 +1015,11 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
                   <text x={cur[0] + 0.4} y={cur[1] - 0.4} fontSize={12 / k} fill="var(--map-ink)">
                     {dist(chainStart, cur).toFixed(2)} м
                   </text>
+                  {chainWallAngle && <AngleMark at={chainStart} to={cur} info={chainWallAngle} k={k} />}
                 </g>
+              )}
+              {tool === 'select' && selected && isShape(selected) && selected.t !== 'entry' && (
+                <RotateHandle o={selected} k={k} />
               )}
               {draft && (
                 <g pointerEvents="none">
@@ -1034,8 +1104,10 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
           ) : selected && isPartition(selected) ? (
             <PartitionProperties
               p={selected}
+              wallAngle={selectedWallAngle?.info.angle ?? null}
               conflict={conflicts.has(selected.id)}
               onChange={(patch) => updPartition(selected.id, patch)}
+              onWallAngle={(deg) => setPartitionWallAngle(selected, deg)}
               onDelete={() => remove(selected.id)}
             />
           ) : selected && isRoom(selected) ? (
@@ -1084,13 +1156,71 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
           X: {cur[0].toFixed(1)} м · Y: {cur[1].toFixed(1)} м
         </span>
         <span>Масштаб: {((k / BASE_SCALE) * 100).toFixed(0)}%</span>
-        <span>Крок: 0,5 м</span>
+        <span>Крок: {tool === 'partition' || (selected && isPartition(selected)) ? '1 см' : '0,5 м'}</span>
         {msg && <span className={styles.msg}>{msg}</span>}
         <span>Стелажів: {racksCount}</span>
         {room && <span>Площа: {polygonArea(room.pts).toFixed(0)} м²</span>}
         <span className={conflicts.size ? styles.bad : undefined}>Конфліктів: {conflicts.size}</span>
       </footer>
     </div>
+  );
+}
+
+/** Ручка повороту над виділеним об'єктом (у його локальних координатах, тож обертається разом з ним). */
+function RotateHandle({ o, k }: { o: ShapeObject; k: number }) {
+  const sw = (n: number) => n / k;
+  // Вище за підпис стелажа, щоб його не перекривати
+  const cy = -o.h / 2 - sw(34);
+  return (
+    <g transform={`translate(${o.x} ${o.y}) rotate(${o.a})`}>
+      <g data-handle="rotate" style={{ cursor: 'grab' }}>
+        <title>Поворот (Shift — без кроку 15°)</title>
+        <circle cy={cy} r={sw(10)} fill="#fff" stroke="var(--map-acc)" strokeWidth={sw(2)} />
+        <text
+          y={cy}
+          fontSize={sw(14)}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="var(--map-ink)"
+          pointerEvents="none"
+        >
+          ⟳
+        </text>
+      </g>
+    </g>
+  );
+}
+
+/** Дуга й підпис кута між стіною (від її напрямку a → b) і перегородкою, що виходить із точки at. */
+function AngleMark({ at, to, info, k }: { at: Point; to: Point; info: EdgeAngle; k: number }) {
+  const r = 26 / k;
+  const [a, b] = info.edge;
+  const base = Math.atan2(b[1] - a[1], b[0] - a[0]);
+  const end = Math.atan2(to[1] - at[1], to[0] - at[0]);
+  const mid = base + (info.side * info.angle * Math.PI) / 360;
+  const p1: Point = [at[0] + Math.cos(base) * r, at[1] + Math.sin(base) * r];
+  const p2: Point = [at[0] + Math.cos(end) * r, at[1] + Math.sin(end) * r];
+  const tr = r + 16 / k;
+  return (
+    <g pointerEvents="none">
+      <path
+        d={`M${at[0]} ${at[1]}L${p1[0]} ${p1[1]}A${r} ${r} 0 0 ${info.side > 0 ? 1 : 0} ${p2[0]} ${p2[1]}Z`}
+        fill="var(--map-acc)"
+        fillOpacity=".25"
+        stroke="var(--map-acc)"
+        strokeWidth={1.5 / k}
+      />
+      <text
+        x={at[0] + Math.cos(mid) * tr}
+        y={at[1] + Math.sin(mid) * tr}
+        fontSize={11 / k}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="var(--map-ink)"
+      >
+        {info.angle.toFixed(1)}°
+      </text>
+    </g>
   );
 }
 
@@ -1117,13 +1247,35 @@ function Properties({
       <TextField label={o.t === 'rack' ? 'Код стелажа' : 'Назва'} value={o.name} onChange={(name) => onChange({ name })} />
       {o.t !== 'entry' && (
         <>
-          <NumField label="Довжина (X), м" value={o.w} step={0.5} min={0.5} onChange={(w) => onChange({ w: Math.max(0.5, w) })} />
-          <NumField label="Ширина (Y), м" value={o.h} step={0.5} min={0.5} onChange={(h) => onChange({ h: Math.max(0.5, h) })} />
+          <NumField label="Довжина (X), м" value={o.w} step={0.1} min={0.5} onChange={(w) => onChange({ w: Math.max(0.5, w) })} />
+          <NumField label="Ширина (Y), м" value={o.h} step={0.1} min={0.5} onChange={(h) => onChange({ h: Math.max(0.5, h) })} />
         </>
       )}
-      <NumField label="X, м" value={o.x} step={0.5} onChange={(x) => onChange({ x })} />
-      <NumField label="Y, м" value={o.y} step={0.5} onChange={(y) => onChange({ y })} />
-      {o.t !== 'entry' && <NumField label="Кут, °" value={o.a} step={15} onChange={(a) => onChange({ a })} />}
+      <NumField label="X, м" value={o.x} step={0.1} onChange={(x) => onChange({ x })} />
+      <NumField label="Y, м" value={o.y} step={0.1} onChange={(y) => onChange({ y })} />
+      {o.t !== 'entry' && (
+        <>
+          <NumField label="Кут, °" value={o.a} step={0.5} onChange={(a) => onChange({ a: normalizeAngle(a) })} />
+          <div className={styles.row}>
+            <button
+              type="button"
+              className={styles.btn}
+              title="Повернути на 90° проти годинникової стрілки"
+              onClick={() => onChange({ a: normalizeAngle(o.a - 90) })}
+            >
+              ⟲ 90°
+            </button>
+            <button
+              type="button"
+              className={styles.btn}
+              title="Повернути на 90° за годинниковою стрілкою"
+              onClick={() => onChange({ a: normalizeAngle(o.a + 90) })}
+            >
+              ⟳ 90°
+            </button>
+          </div>
+        </>
+      )}
       {o.t === 'rack' && (
         <NumField
           label="Полиць"
@@ -1154,7 +1306,7 @@ function Properties({
           <NumField
             label="Макс. висота, м"
             value={o.maxHeight ?? ''}
-            step={0.5}
+            step={0.1}
             min={0}
             onChange={(maxHeight) => onChange({ maxHeight: Math.max(0, maxHeight) })}
             onClear={() => onChange({ maxHeight: null })}
@@ -1204,13 +1356,13 @@ function RoomProperties({
           <CommitNumField
             label="X, м"
             value={round2(pts[vertex][0])}
-            step={0.5}
+            step={0.1}
             onCommit={(x) => onVertexChange(vertex, [x, pts[vertex][1]])}
           />
           <CommitNumField
             label="Y, м"
             value={round2(pts[vertex][1])}
-            step={0.5}
+            step={0.1}
             onCommit={(y) => onVertexChange(vertex, [pts[vertex][0], y])}
           />
           <button type="button" className={styles.btn} onClick={() => onVertexDelete(vertex)} disabled={pts.length <= 3}>
@@ -1224,7 +1376,7 @@ function RoomProperties({
           key={i}
           label={`Стіна ${i + 1}, м`}
           value={round2(dist(a, pts[(i + 1) % pts.length]))}
-          step={0.5}
+          step={0.1}
           min={MIN_PARTITION_LENGTH}
           onCommit={(len) => onEdgeLength(i, len)}
         />
@@ -1239,13 +1391,18 @@ function RoomProperties({
 
 function PartitionProperties({
   p,
+  wallAngle,
   conflict,
   onChange,
+  onWallAngle,
   onDelete,
 }: {
   p: PartitionObject;
+  /** Кут до стіни, до якої прикріплена перегородка; null — не прикріплена. */
+  wallAngle: number | null;
   conflict: boolean;
   onChange: (patch: Partial<PartitionObject>) => void;
+  onWallAngle: (deg: number) => void;
   onDelete: () => void;
 }) {
   return (
@@ -1254,10 +1411,21 @@ function PartitionProperties({
       <CommitNumField
         label="Довжина, м"
         value={round2(dist(p.start, p.end))}
-        step={0.5}
+        step={0.1}
         min={MIN_PARTITION_LENGTH}
         onCommit={(len) => len >= MIN_PARTITION_LENGTH && onChange({ end: withLength(p.start, p.end, len) })}
       />
+      {wallAngle !== null ? (
+        <CommitNumField
+          label="Кут до стіни, °"
+          value={Math.round(wallAngle * 10) / 10}
+          step={0.5}
+          min={0}
+          onCommit={onWallAngle}
+        />
+      ) : (
+        <p className={styles.muted}>Прикріпіть кінець до стіни, щоб задати кут до неї.</p>
+      )}
       <CommitNumField
         label="Товщина, м"
         value={p.thickness}
@@ -1268,7 +1436,7 @@ function PartitionProperties({
       <CommitNumField
         label="Висота, м"
         value={p.height ?? ''}
-        step={0.5}
+        step={0.1}
         min={0}
         onCommit={(h) => onChange({ height: h > 0 ? h : null })}
         onClear={() => onChange({ height: null })}
@@ -1317,7 +1485,7 @@ function NumField({
         onChange={(e) => {
           if (e.target.value === '' && onClear) return onClear();
           const n = parseFloat(e.target.value);
-          if (!Number.isNaN(n)) onChange(n);
+          if (!Number.isNaN(n)) onChange(round3(n));
         }}
       />
     </label>
@@ -1349,7 +1517,7 @@ function CommitNumField({
     setText(null);
     if (text.trim() === '') return onClear?.();
     const n = parseFloat(text);
-    if (!Number.isNaN(n)) onCommit(n);
+    if (!Number.isNaN(n)) onCommit(round3(n));
   };
   return (
     <label className={styles.f}>

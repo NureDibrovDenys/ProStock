@@ -212,17 +212,20 @@ function Shape({
           />
         )}
       </g>
-      <text
-        x={lx}
-        y={ly}
-        fontSize={fs}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="var(--map-ink)"
-        pointerEvents="none"
-      >
-        {label}
-      </text>
+      {/* Перешкоди без підпису — штрихування й так їх позначає, а назва лише заважає */}
+      {o.t !== 'obst' && (
+        <text
+          x={lx}
+          y={ly}
+          fontSize={fs}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="var(--map-ink)"
+          pointerEvents="none"
+        >
+          {label}
+        </text>
+      )}
     </g>
   );
 }

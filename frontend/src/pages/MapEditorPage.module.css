@@ -283,6 +283,16 @@
   cursor: default;
 }
 
+.row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.row .btn {
+  margin-top: 0;
+}
+
 .btnDanger {
   border-color: var(--map-bad);
   color: var(--map-bad);
