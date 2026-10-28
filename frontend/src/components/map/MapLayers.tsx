@@ -7,6 +7,8 @@ type MapLayersProps = {
   viewport: Viewport;
   size: { width: number; height: number };
   selectedId?: string | null;
+  /** Кілька виділених об'єктів (редактор); доповнює selectedId. */
+  selectedIds?: ReadonlySet<string>;
   hoveredId?: string | null;
   conflicts?: Set<string>;
   /** Підпис стелажа замість «N пол.», напр. заповненість на сторінці складу. */
@@ -22,6 +24,7 @@ export function MapLayers({
   viewport,
   size,
   selectedId,
+  selectedIds,
   hoveredId,
   conflicts,
   rackCaption,
@@ -29,6 +32,7 @@ export function MapLayers({
   children,
 }: MapLayersProps) {
   const { x: tx, y: ty, scale: k } = viewport;
+  const isSelected = (id: string) => selectedId === id || (selectedIds?.has(id) ?? false);
   const sw = (n: number) => n / k; // товщина лінії, стала на екрані
   const room = objs.find((o) => o.t === 'room');
   const shapes = objs.filter(isShape);
@@ -69,7 +73,7 @@ export function MapLayers({
               data-id={room.id}
               points={room.pts.map((p) => p.join(',')).join(' ')}
               fill="var(--map-room)"
-              stroke={selectedId === room.id ? 'var(--map-acc)' : 'var(--map-pri)'}
+              stroke={isSelected(room.id) ? 'var(--map-acc)' : 'var(--map-pri)'}
               strokeWidth=".35"
               strokeLinejoin="miter"
             />
@@ -78,7 +82,7 @@ export function MapLayers({
         )}
 
         {partitions.map((p) => (
-          <Partition key={p.id} p={p} k={k} selected={selectedId === p.id} conflict={conflicts?.has(p.id) ?? false} />
+          <Partition key={p.id} p={p} k={k} selected={isSelected(p.id)} conflict={conflicts?.has(p.id) ?? false} />
         ))}
 
         {shapes
@@ -88,7 +92,7 @@ export function MapLayers({
               key={o.id}
               o={o}
               k={k}
-              selected={selectedId === o.id}
+              selected={isSelected(o.id)}
               hovered={hoveredId === o.id}
               conflict={conflicts?.has(o.id) ?? false}
               caption={o.t === 'rack' ? rackCaption?.(o) : undefined}
@@ -97,7 +101,7 @@ export function MapLayers({
         {shapes
           .filter((o) => o.t === 'entry')
           .map((o) => (
-            <Entry key={o.id} o={o} k={k} selected={selectedId === o.id} />
+            <Entry key={o.id} o={o} k={k} selected={isSelected(o.id)} />
           ))}
 
         {children}

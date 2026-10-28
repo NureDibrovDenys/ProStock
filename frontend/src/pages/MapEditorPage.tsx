@@ -14,6 +14,7 @@ import {
   FINE_STEP,
   angleToEdge,
   closestPointOnSegment,
+  corners,
   dist,
   isSimplePolygon,
   movePolygonEdge,
@@ -74,7 +75,7 @@ const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
 
 const HINTS: Record<Tool, string> = {
   select:
-    'Клік — вибір · перетягування — переміщення · ⟳ над об’єктом — поворот (Shift — без кроку 15°) · контур: тягніть вершину, «+» — нова вершина, ребро — зсув · Del — видалити · Ctrl+Z — скасувати',
+    'Клік — вибір · Shift+клік — додати до виділення · Shift+рамка — виділити кілька · Ctrl+A — усе · перетягування — переміщення · ⟳ над об’єктом — поворот (Shift — без кроку 15°) · контур: тягніть вершину, «+» — нова вершина, ребро — зсув · Del — видалити · Ctrl+Z — скасувати',
   pan: 'Перетягуйте, щоб рухати полотно (також: середня кнопка або Пробіл)',
   wall: 'Клік — вершина контуру · Shift — кут 45°/90° · Backspace — прибрати останню · Enter або клік на першу точку — замкнути · Esc — скасувати',
   partition:
@@ -127,9 +128,14 @@ export function MapEditorPage() {
 
 type Draft = { t: ShapeKind; x0: number; y0: number; x1: number; y1: number };
 type WallDrag = { edgeIndex: number; start: Point; initialPoints: Point[]; normal: Point };
-type PartitionDrag =
-  | { id: string; mode: 'move'; origin: Point; start0: Point; end0: Point }
-  | { id: string; mode: 'start' | 'end' };
+type PartitionDrag = { id: string; mode: 'start' | 'end' };
+/**
+ * Перетягування виділення: початкові точки кожного об'єкта (центр фігури або кінці перегородки).
+ * До сітки прилипає об'єкт під курсором (anchor), решта зсуваються на той самий вектор.
+ */
+type GroupDrag = { anchor: string; origin: Point; starts: Map<string, Point[]>; delta: Point; moved: boolean };
+/** Рамка виділення; base — що було виділено до неї (рамка додає до виділення). */
+type Marquee = { from: Point; to: Point; base: string[] };
 /** record — окремий крок історії; drag — один крок на весь жест перетягування. */
 type HistoryMode = 'record' | 'drag';
 /** Що не враховувати під час прив'язки (сам об'єкт, який зараз тягнуть). */
@@ -141,7 +147,11 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
   const [objs, setObjsRaw] = useState<MapObject[]>(initial);
   const [tool, setTool] = useState<Tool>('pan');
-  const [sel, setSel] = useState<string | null>(null);
+  // Виділення: один об'єкт — панель властивостей і ручки, кілька — групові дії
+  const [selIds, setSelIds] = useState<string[]>([]);
+  const sel = selIds.length === 1 ? selIds[0] : null;
+  const setSel = (id: string | null) => setSelIds(id ? [id] : []);
+  const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [selVertex, setSelVertex] = useState<number | null>(null);
   const [poly, setPoly] = useState<Point[]>([]);
   const [chainStart, setChainStart] = useState<Point | null>(null);
@@ -155,7 +165,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
   const vp = useViewport();
   const k = vp.viewport.scale;
-  const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const groupDrag = useRef<GroupDrag | null>(null);
   const wallDrag = useRef<WallDrag | null>(null);
   const vertexDrag = useRef<number | null>(null);
   const partDrag = useRef<PartitionDrag | null>(null);
@@ -177,8 +187,8 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     room && sel === room.id && selVertex !== null && selVertex < room.pts.length ? selVertex : null;
 
   // Актуальний стан для глобальних слухачів клавіатури
-  const S = useRef({ tool, sel, poly, chainStart, vertex: activeVertex });
-  S.current = { tool, sel, poly, chainStart, vertex: activeVertex };
+  const S = useRef({ tool, sel, selIds, poly, chainStart, vertex: activeVertex });
+  S.current = { tool, sel, selIds, poly, chainStart, vertex: activeVertex };
 
   const pushHistory = () => {
     past.current.push(objsRef.current);
@@ -255,10 +265,46 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     return true;
   };
 
-  const remove = (id: string) => {
-    setObjs((os) => os.filter((o) => o.id !== id));
+  const remove = (...ids: string[]) => {
+    setObjs((os) => os.filter((o) => !ids.includes(o.id)));
     setSel(null);
     setSelVertex(null);
+  };
+
+  /** Повертає виділені фігури й перегородки навколо спільного центру (центр — на сітці, щоб 90° не збивали крок). */
+  const rotateGroup = (ids: string[], deg: number) => {
+    const items = objsRef.current.filter((o) => ids.includes(o.id));
+    const pts = items.flatMap((o) => (isShape(o) ? corners(o) : isPartition(o) ? [o.start, o.end] : []));
+    if (!pts.length) return;
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const c: Point = [snap((Math.min(...xs) + Math.max(...xs)) / 2), snap((Math.min(...ys) + Math.max(...ys)) / 2)];
+    const r = (deg * Math.PI) / 180;
+    const turn = ([x, y]: Point): Point => [
+      round2(c[0] + (x - c[0]) * Math.cos(r) - (y - c[1]) * Math.sin(r)),
+      round2(c[1] + (x - c[0]) * Math.sin(r) + (y - c[1]) * Math.cos(r)),
+    ];
+    setObjs((os) =>
+      os.map((o) => {
+        if (!ids.includes(o.id)) return o;
+        if (isShape(o)) {
+          const [x, y] = turn([o.x, o.y]);
+          return { ...o, x, y, a: normalizeAngle(o.a + deg) };
+        }
+        return isPartition(o) ? { ...o, start: turn(o.start), end: turn(o.end) } : o;
+      }),
+    );
+  };
+
+  const startGroupDrag = (anchor: string, origin: Point, ids: string[]) => {
+    const starts = new Map<string, Point[]>();
+    for (const o of objs) {
+      if (!ids.includes(o.id)) continue;
+      if (isShape(o)) starts.set(o.id, [[o.x, o.y]]);
+      else if (isPartition(o)) starts.set(o.id, [o.start, o.end]);
+    }
+    groupDrag.current = { anchor, origin, starts, delta: [0, 0], moved: false };
+    pendingCheckpoint.current = true;
   };
 
   const removeVertex = (index: number) => {
@@ -414,12 +460,23 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
         e.preventDefault();
         return e.code === 'KeyY' || e.shiftKey ? redo() : undo();
       }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') {
+        // Усе, крім контуру приміщення
+        e.preventDefault();
+        pick('select');
+        setSelVertex(null);
+        setSelIds(objsRef.current.filter((o) => !isRoom(o)).map((o) => o.id));
+        return;
+      }
       if (key === ' ') {
         space.current = true;
         e.preventDefault();
         return;
       }
-      if (key === 'Escape') return pick('select');
+      if (key === 'Escape') {
+        if (s.tool === 'select') setSelIds([]);
+        return pick('select');
+      }
       if (key === 'Enter') return s.tool === 'partition' ? setChainStart(null) : closePoly();
       if (key === 'Delete' || key === 'Backspace') {
         if (s.tool === 'wall' && s.poly.length) {
@@ -434,13 +491,14 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
           e.preventDefault();
           return removeVertex(s.vertex);
         }
-        if (s.sel) {
+        if (s.selIds.length) {
           e.preventDefault();
-          return remove(s.sel);
+          return remove(...s.selIds);
         }
         return;
       }
       const lower = key.toLowerCase();
+      if (lower === 'q' && s.selIds.length > 1) return rotateGroup(s.selIds, e.shiftKey ? -15 : 15);
       if (lower === 'q' && s.sel) {
         const step = e.shiftKey ? -15 : 15;
         setObjs((os) => os.map((o) => (o.id === s.sel && isShape(o) ? { ...o, a: normalizeAngle(o.a + step) } : o)));
@@ -516,21 +574,31 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
       const el = target.closest('[data-id]') as HTMLElement | SVGElement | null;
       const id = el?.dataset.id;
+      const o = id ? objs.find((x) => x.id === id) : undefined;
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey;
       setSelVertex(null);
+      // Shift/Ctrl по порожньому місці або підлозі приміщення — рамка виділення
+      if (additive && (!o || isRoom(o))) {
+        setMarquee({ from: p, to: p, base: selIds });
+        capture();
+        return;
+      }
       if (!id) {
         // Порожнє місце: зняти виділення й рухати полотно
         setSel(null);
         return vp.startPan(e);
       }
-      setSel(id);
-      const o = objs.find((x) => x.id === id);
-      if (o && isShape(o)) {
-        drag.current = { id, dx: o.x - p[0], dy: o.y - p[1] };
-        pendingCheckpoint.current = true;
-        capture();
-      } else if (o && isPartition(o)) {
-        partDrag.current = { id, mode: 'move', origin: p, start0: o.start, end0: o.end };
-        pendingCheckpoint.current = true;
+      if (additive && o) {
+        // Додати або прибрати об'єкт; контур у групове виділення не входить
+        const base = selIds.filter((x) => x !== room?.id);
+        setSelIds(base.includes(id) ? base.filter((x) => x !== id) : [...base, id]);
+        return;
+      }
+      // Клік по вже виділеному об'єкту тягне всю групу
+      const group = selIds.includes(id) ? selIds : [id];
+      if (!selIds.includes(id)) setSel(id);
+      if (o && !isRoom(o)) {
+        startGroupDrag(id, p, group);
         capture();
       }
       return;
@@ -586,6 +654,41 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
     if (vp.movePan(e)) return;
 
+    if (marquee) {
+      setMarquee({ ...marquee, to: p });
+      return;
+    }
+
+    const g = groupDrag.current;
+    if (g) {
+      const a0 = g.starts.get(g.anchor)?.[0];
+      const anchor = objs.find((o) => o.id === g.anchor);
+      if (!a0 || !anchor) return;
+      const raw: Point = [p[0] - g.origin[0], p[1] - g.origin[1]];
+      // Перегородка рухається з кроком 1 см, фігура прилипає центром до сітки
+      const delta: Point = isPartition(anchor)
+        ? [snapFine(raw[0]), snapFine(raw[1])]
+        : [snap(a0[0] + raw[0]) - a0[0], snap(a0[1] + raw[1]) - a0[1]];
+      if (delta[0] === g.delta[0] && delta[1] === g.delta[1]) return;
+      g.delta = delta;
+      g.moved = true;
+      const shift = ([x, y]: Point): Point => [round2(x + delta[0]), round2(y + delta[1])];
+      setObjs(
+        (os) =>
+          os.map((o) => {
+            const s = g.starts.get(o.id);
+            if (!s) return o;
+            if (isShape(o)) {
+              const [x, y] = shift(s[0]);
+              return { ...o, x, y };
+            }
+            return isPartition(o) ? { ...o, start: shift(s[0]), end: shift(s[1]) } : o;
+          }),
+        'drag',
+      );
+      return;
+    }
+
     const rid = rotateDrag.current;
     if (rid) {
       const o = objs.find((x) => x.id === rid);
@@ -618,43 +721,34 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
     if (pd) {
       const part = objs.find((o) => o.id === pd.id);
       if (!part || !isPartition(part)) return;
-      if (pd.mode === 'move') {
-        const dx = snapFine(p[0] - pd.origin[0]);
-        const dy = snapFine(p[1] - pd.origin[1]);
-        if (dist([pd.start0[0] + dx, pd.start0[1] + dy], part.start) < 1e-9) return;
-        updPartition(
-          pd.id,
-          { start: [pd.start0[0] + dx, pd.start0[1] + dy], end: [pd.end0[0] + dx, pd.end0[1] + dy] },
-          'drag',
-        );
-      } else {
-        const other = pd.mode === 'start' ? part.end : part.start;
-        const q = snapPoint(p, {
-          from: other,
-          ortho: e.shiftKey,
-          edges: true,
-          align: true,
-          fine: true,
-          ex: { partitionId: pd.id },
-        });
-        if (dist(q, other) >= MIN_PARTITION_LENGTH) updPartition(pd.id, pd.mode === 'start' ? { start: q } : { end: q }, 'drag');
-        setCur(q);
-      }
+      const other = pd.mode === 'start' ? part.end : part.start;
+      const q = snapPoint(p, {
+        from: other,
+        ortho: e.shiftKey,
+        edges: true,
+        align: true,
+        fine: true,
+        ex: { partitionId: pd.id },
+      });
+      if (dist(q, other) >= MIN_PARTITION_LENGTH) updPartition(pd.id, pd.mode === 'start' ? { start: q } : { end: q }, 'drag');
+      setCur(q);
       return;
     }
 
-    const d = drag.current;
-    if (d) {
-      const o = objs.find((x) => x.id === d.id);
-      const x = snap(p[0] + d.dx);
-      const y = snap(p[1] + d.dy);
-      if (o && isShape(o) && (o.x !== x || o.y !== y)) upd(d.id, { x, y }, 'drag');
-    } else if (draft) setDraft({ ...draft, x1: sp[0], y1: sp[1] });
+    if (draft) setDraft({ ...draft, x1: sp[0], y1: sp[1] });
   };
 
   const up = (e: ReactPointerEvent) => {
     vp.endPan(e);
-    drag.current = null;
+    const g = groupDrag.current;
+    // Клік без перетягування по об'єкту з групи — залишити виділеним лише його
+    if (g && !g.moved && selIds.length > 1) setSel(g.anchor);
+    groupDrag.current = null;
+    if (marquee) {
+      const inside = objectsInRect(objs, marquee.from, marquee.to);
+      setSelIds([...new Set([...marquee.base.filter((id) => id !== room?.id), ...inside])]);
+      setMarquee(null);
+    }
     wallDrag.current = null;
     vertexDrag.current = null;
     partDrag.current = null;
@@ -695,6 +789,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
 
   const conflicts = useMemo(() => findConflicts(objs), [objs]);
   const selected = objs.find((o) => o.id === sel) ?? null;
+  const selSet = useMemo(() => new Set(selIds), [selIds]);
   const racksCount = objs.filter((o) => o.t === 'rack').length;
 
   const mutation = useMutation({
@@ -891,7 +986,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
             onPointerLeave={() => setHoveredWall(null)}
             onContextMenu={(e) => e.preventDefault()}
           >
-            <MapLayers objs={objs} viewport={vp.viewport} size={vp.size} selectedId={sel} conflicts={conflicts}>
+            <MapLayers objs={objs} viewport={vp.viewport} size={vp.size} selectedIds={selSet} conflicts={conflicts}>
               {tool === 'select' && room && (
                 <g aria-label="Редагування стін">
                   {room.pts.map((start, index) => {
@@ -1020,7 +1115,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
               {(tool === 'wall' ||
                 tool === 'partition' ||
                 vertexDrag.current !== null ||
-                (partDrag.current !== null && partDrag.current.mode !== 'move')) && (
+                partDrag.current !== null) && (
                 <g pointerEvents="none">
                   {alignGuides(cur).map(([a, b], i) => (
                     <line
@@ -1079,6 +1174,20 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
               )}
               {tool === 'select' && selected && isShape(selected) && selected.t !== 'entry' && (
                 <RotateHandle o={selected} k={k} />
+              )}
+              {marquee && (
+                <rect
+                  x={Math.min(marquee.from[0], marquee.to[0])}
+                  y={Math.min(marquee.from[1], marquee.to[1])}
+                  width={Math.abs(marquee.to[0] - marquee.from[0])}
+                  height={Math.abs(marquee.to[1] - marquee.from[1])}
+                  fill="var(--map-acc)"
+                  fillOpacity=".1"
+                  stroke="var(--map-acc)"
+                  strokeWidth={sw(1)}
+                  strokeDasharray={`${sw(4)} ${sw(3)}`}
+                  pointerEvents="none"
+                />
               )}
               {draft && (
                 <g pointerEvents="none">
@@ -1153,7 +1262,15 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
         </div>
 
         <aside className={styles.panel}>
-          {selected && isShape(selected) ? (
+          {selIds.length > 1 ? (
+            <GroupProperties
+              items={objs.filter((o) => selSet.has(o.id))}
+              conflicts={selIds.filter((id) => conflicts.has(id)).length}
+              onRotate={(deg) => rotateGroup(selIds, deg)}
+              onClear={() => setSel(null)}
+              onDelete={() => remove(...selIds)}
+            />
+          ) : selected && isShape(selected) ? (
             <Properties
               o={selected}
               conflict={conflicts.has(selected.id)}
@@ -1280,6 +1397,74 @@ function AngleMark({ at, to, info, k }: { at: Point; to: Point; info: EdgeAngle;
         {info.angle.toFixed(1)}°
       </text>
     </g>
+  );
+}
+
+/** Об'єкти (крім контуру), що повністю лежать у прямокутнику рамки виділення. */
+function objectsInRect(objs: MapObject[], a: Point, b: Point): string[] {
+  const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
+  const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+  const inside = ([x, y]: Point) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  return objs
+    .filter((o) => {
+      if (isPartition(o)) return inside(o.start) && inside(o.end);
+      if (!isShape(o)) return false;
+      // Точка входу — за центром, решта — усіма кутами з урахуванням повороту
+      return o.t === 'entry' ? inside([o.x, o.y]) : corners(o).every(inside);
+    })
+    .map((o) => o.id);
+}
+
+const GROUP_LABELS: Record<Exclude<MapObject['t'], 'room'>, string> = {
+  rack: 'Стелажі',
+  partition: 'Перегородки',
+  obst: 'Перешкоди',
+  zin: 'Зони приймання',
+  zstore: 'Зони зберігання',
+  zout: 'Зони відвантаження',
+  entry: 'Точки входу',
+};
+
+function GroupProperties({
+  items,
+  conflicts,
+  onRotate,
+  onClear,
+  onDelete,
+}: {
+  items: MapObject[];
+  conflicts: number;
+  onRotate: (deg: number) => void;
+  onClear: () => void;
+  onDelete: () => void;
+}) {
+  const counts = new Map<string, number>();
+  for (const o of items) if (!isRoom(o)) counts.set(GROUP_LABELS[o.t], (counts.get(GROUP_LABELS[o.t]) ?? 0) + 1);
+  return (
+    <>
+      <h4>Виділено об'єктів: {items.length}</h4>
+      {[...counts].map(([label, n]) => (
+        <p key={label} className={styles.muted}>
+          {label}: {n}
+        </p>
+      ))}
+      <p className={styles.muted}>Перетягніть будь-який із них, щоб посунути всю групу.</p>
+      <div className={styles.row}>
+        <button type="button" className={styles.btn} title="Повернути групу на 90° проти годинникової стрілки" onClick={() => onRotate(-90)}>
+          ⟲ 90°
+        </button>
+        <button type="button" className={styles.btn} title="Повернути групу на 90° за годинниковою стрілкою" onClick={() => onRotate(90)}>
+          ⟳ 90°
+        </button>
+      </div>
+      {conflicts > 0 && <div className={styles.conflict}>⚠ Колізії у виділенні: {conflicts}</div>}
+      <button type="button" className={styles.btn} onClick={onClear}>
+        Зняти виділення
+      </button>
+      <button type="button" className={cx(styles.btn, styles.btnDanger)} onClick={onDelete}>
+        Видалити всі ({items.length})
+      </button>
+    </>
   );
 }
 
