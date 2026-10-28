@@ -121,9 +121,9 @@ async def list_users(
         pattern: str = f"%{search.strip()}%"
         conditions.append(
             or_(
-                User.email.like(pattern),
-                User.first_name.like(pattern),
-                User.last_name.like(pattern),
+                User.email.ilike(pattern),
+                User.first_name.ilike(pattern),
+                User.last_name.ilike(pattern),
             )
         )
     
@@ -249,7 +249,6 @@ async def update_user(
         if role is None:
             raise RoleNotFoundError(role_name.value)
         user.role_id = role.id
-        user.role = role
 
     try:
         await session.commit()
