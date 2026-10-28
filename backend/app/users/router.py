@@ -45,8 +45,8 @@ async def list_users(
     users, total = await crud.list_users(
         session,
         search=search,
-        role=role,
-        status=user_status,
+        role_name=role,
+        user_status=user_status,
         page=page,
         page_size=page_size,
     )
@@ -67,12 +67,12 @@ async def create_user(
     try:
         user = await crud.create_user(
             session,
-            email=payload.user_email,
+            user_email=payload.user_email,
             password=payload.password,
             first_name=payload.first_name.strip(),
             last_name=payload.last_name.strip(),
-            role=payload.role,
-            status=payload.status,
+            role_name=payload.role,
+            user_status=payload.status,
         )
     except crud.EmailAlreadyExistsError as exc:
         raise HTTPException(
@@ -133,12 +133,12 @@ async def update_user(
         updated = await crud.update_user(
             session,
             user,
-            email=payload.user_email,
+            user_email=payload.user_email,
             password=payload.password,
             first_name=payload.first_name.strip() if payload.first_name else None,
             last_name=payload.last_name.strip() if payload.last_name else None,
-            role=payload.role,
-            status=payload.status,
+            role_name=payload.role,
+            user_status=payload.status,
         )
     except crud.EmailAlreadyExistsError as exc:
         raise HTTPException(
@@ -177,5 +177,5 @@ async def delete_user(
             detail="Не можна видалити останнього активного адміністратора",
         )
 
-    await crud.delete_user(session, user)
+    await crud.delete_user(session, user_id)
     return None
