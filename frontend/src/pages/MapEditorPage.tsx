@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import type { ObstacleType, PointType, WarehouseMap } from '../api/types';
 import { getWarehouseMap, saveWarehouseMap } from '../api/warehouse';
 import { MapLayers } from '../components/map/MapLayers';
@@ -799,19 +800,26 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       queryClient.setQueryData(['map', WAREHOUSE_ID], saved ?? sent);
       queryClient.invalidateQueries({ queryKey: ['racks', WAREHOUSE_ID] });
       setDirty(false);
-      flash('Збережено');
     },
-    onError: (err) => flash(`Не вдалося зберегти: ${err.message}`),
+    onError: (err) => toast.error(`Не вдалося зберегти: ${err.message}`),
   });
 
   const save = () => {
     const errors = validateMap(objs);
-    if (errors.length) return flash(errors.join(' · '));
+    if (errors.length) return void toast.error(errors.join(' · '));
     const codes = objs.filter((o): o is ShapeObject => o.t === 'rack').map((o) => o.name.trim());
-    if (codes.some((c) => !c)) return flash('У кожного стелажа має бути назва (код)');
-    if (new Set(codes).size !== codes.length) return flash('Назви стелажів повторюються');
-    if (conflicts.size && !window.confirm(`На мапі є конфлікти (${conflicts.size}). Зберегти все одно?`)) return;
-    mutation.mutate(toApi(objs));
+    if (codes.some((c) => !c)) return void toast.error('У кожного стелажа має бути назва (код)');
+    if (new Set(codes).size !== codes.length) return void toast.error('Назви стелажів повторюються');
+    const conflictCount = conflicts.size;
+    if (conflictCount && !window.confirm(`На мапі є конфлікти (${conflictCount}). Зберегти все одно?`)) return;
+    mutation.mutate(toApi(objs), {
+      onSuccess: () => {
+        if (!conflictCount) return void toast.success('Мапу збережено');
+        toast.warning(
+          `Мапу збережено з конфліктами (${conflictCount}): є перетини стелажів або вихід за межі приміщення`,
+        );
+      },
+    });
   };
   saveRef.current = save;
 
