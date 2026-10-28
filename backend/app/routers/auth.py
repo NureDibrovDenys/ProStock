@@ -107,8 +107,8 @@ async def _issue_session(
             user_id=user.id,
             token_hash=hash_token(raw_refresh),
             expires_at=refresh_expires_at,
-            user_agent=(request.headers.get("user-agent") or "")[:255] or None,
-            ip_address=(request.client.host if request.client else None),
+            user_agent=request.headers.get("user-agent"),
+            ip=(request.client.host if request.client else None),
         )
     )
     await session.commit()

@@ -6,12 +6,13 @@ from sqlalchemy import (
     ForeignKey,
     String,
     func,
-    CheckConstraint
+    CheckConstraint,
+    Text,
 )
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
-    relationship
+    relationship,
 )
 
 from app.core.enums import RoleName, UserStatus
@@ -25,17 +26,17 @@ class Role(Base):
         "role_id",
         BigInteger,
         primary_key=True,
-        autoincrement=True
+        autoincrement=True,
     )
     name: Mapped[RoleName] = mapped_column(
         "role_name",
         Enum(
             RoleName,
             name="role_name",
-            native_enum=False
+            native_enum=False,
         ),
         nullable=False,
-        unique=True
+        unique=True,
     )
     
     users: Mapped[list["User"]] = relationship(back_populates="role")
@@ -50,75 +51,81 @@ class User(Base):
         "user_id",
         BigInteger,
         primary_key=True,
-        autoincrement=True
+        autoincrement=True,
     )
     email: Mapped[str] = mapped_column(
         "user_email",
         String(255),
         unique=True,
         nullable=False,
-        index=True
+        index=True,
     )
     password_hash: Mapped[str] = mapped_column(
+        "password_hash",
         String(255),
-        nullable=False
+        nullable=False,
     )
     first_name: Mapped[str] = mapped_column(
+        "first_name",
         String(100),
-        nullable=False
+        nullable=False,
     )
     last_name: Mapped[str] = mapped_column(
+        "last_name",
         String(100),
-        nullable=False
+        nullable=False,
     )
     role_id: Mapped[int] = mapped_column(
+        "role_id",
         BigInteger,
         ForeignKey(
             "role.role_id",
-            ondelete="RESTRICT"
+            ondelete="RESTRICT",
         ),
         nullable=False,
-        index=True
+        index=True,
     )
     status: Mapped[UserStatus] = mapped_column(
+        "user_status",
         Enum(
             UserStatus,
             name="user_status",
-            native_enum=False
+            native_enum=False,
         ),
         nullable=False,
         default=UserStatus.ACTIVE,
-        server_default=UserStatus.ACTIVE.value,
+        server_default=str(UserStatus.ACTIVE.value),
     )
     created_at: Mapped[datetime] = mapped_column(
+        "user_created_at",
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False
+        nullable=False,
     )
     
     role: Mapped["Role"] = relationship(back_populates="users")
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     
     __table_args__ = (
         CheckConstraint(
             "role_id > 0",
-            name="check_role_id_positive"
+            name="check_role_id_positive",
         ),
     )
     
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r})"
 
-
 class RefreshToken(Base):
-    """Refresh-токен сесії.
-
-    Зберігається лише SHA-256 хеш самого токена: навіть при витоку БД сирі
-    токени відновити неможливо. Кожен refresh ротується — старий запис
-    позначається відкликаним (`revoked_at`).
+    """
+    Session Refresh-token.
+    
+    The SHA-256 hash of the token itself is stored.
+    Even in the event of a DB leak, it is impossible to recover the raw tokens.
+    Each refresh involves rotation — the old record is marked as revoked.
     """
 
     __tablename__ = 'refresh_token'
@@ -161,10 +168,10 @@ class RefreshToken(Base):
     )
     user_agent: Mapped[str | None] = mapped_column(
         "user_agent",
-        String(255),
+        Text,
         nullable=True
     )
-    ip_address: Mapped[str | None] = mapped_column(
+    ip: Mapped[str | None] = mapped_column(
         "ip_address",
         String(45),
         nullable=True
