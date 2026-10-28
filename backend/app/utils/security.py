@@ -192,6 +192,19 @@ async def get_current_user(
         "last_name": user.last_name,
     }
 
+async def get_current_admin_user(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    if current_user["role"] not in {
+        RoleName.ADMIN.value,
+        RoleName.ROOT.value
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access rights required."
+        )
+    return current_user
+
 
 def require_roles(*allowed_roles: str):
     """Фабрика залежностей: пропускає лише вказані ролі."""
