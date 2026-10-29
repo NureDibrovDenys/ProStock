@@ -41,7 +41,7 @@ def map_payload() -> dict:
 
 
 async def test_map_is_persisted_with_ids(client: AsyncClient):
-    token = await login(client, MANAGER)
+    token = await login(client, ADMIN)
 
     saved = await client.put(MAP_URL, headers=auth(token), json=map_payload())
     assert saved.status_code == 200, saved.text
@@ -81,6 +81,12 @@ async def test_resave_keeps_ids_and_removes_missing(client: AsyncClient):
 
 async def test_worker_cannot_save_map(client: AsyncClient):
     token = await login(client, WORKER)
+    assert (await client.get(MAP_URL, headers=auth(token))).status_code == 200
+    assert (await client.put(MAP_URL, headers=auth(token), json=map_payload())).status_code == 403
+
+
+async def test_manager_can_view_but_not_save_map(client: AsyncClient):
+    token = await login(client, MANAGER)
     assert (await client.get(MAP_URL, headers=auth(token))).status_code == 200
     assert (await client.put(MAP_URL, headers=auth(token), json=map_payload())).status_code == 403
 

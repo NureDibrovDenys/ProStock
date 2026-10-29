@@ -18,7 +18,14 @@ export function App() {
       <Route path="/login" element={AUTH_ENABLED ? <LoginPage /> : <Navigate to="/" replace />} />
       <Route element={<RequireAuth />}>
         {/* Редактор мапи — повноекранний, без навбару (як у макеті) */}
-        <Route path="/warehouse/edit" element={<MapEditorPage />} />
+        <Route
+          path="/warehouse/edit"
+          element={
+            <RequirePermission permission="warehouse_map_write">
+              <MapEditorPage />
+            </RequirePermission>
+          }
+        />
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/products" replace />} />
           <Route path="/products" element={<ProductsPage />} />

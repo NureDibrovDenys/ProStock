@@ -32,6 +32,9 @@ PRODUCT_READ_ROLES: frozenset[str] = ALL_ROLES
 # Керування обліковими записами — root та адміністратор
 USER_MANAGE_ROLES: frozenset[str] = ADMIN_ROLES
 
+# Редагування мапи складу — лише керівні ролі
+WAREHOUSE_MAP_WRITE_ROLES: frozenset[str] = ADMIN_ROLES
+
 
 def permissions_for(role: str) -> dict[str, bool]:
     """Повертає плоский список можливостей для ролі (для UI)."""
@@ -42,5 +45,5 @@ def permissions_for(role: str) -> dict[str, bool]:
         "products_import": role in PRODUCT_WRITE_ROLES,
         "products_export": role in PRODUCT_READ_ROLES,
         "users_manage": role in USER_MANAGE_ROLES,
-        "warehouse_map_write": role in PRODUCT_WRITE_ROLES,
+        "warehouse_map_write": role in WAREHOUSE_MAP_WRITE_ROLES,
     }
