@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_async_session
 from app.core.enums import RoleName, UserStatus
 from app.core.rbac import USER_MANAGE_ROLES
+from app.core.serializers import serialize_user
+
 from app.users import crud
 from app.users.models import User
 from app.users.schemas import (
@@ -22,7 +24,6 @@ from app.users.schemas import (
     UserListItem,
     UserListResponse,
     UserUpdatePayload,
-    serialize_user,
 )
 from app.utils.security import (
     get_current_user,
@@ -30,7 +31,7 @@ from app.utils.security import (
     require_roles
 )
 
-router = APIRouter(
+router: APIRouter = APIRouter(
     prefix="/api/v1/users",
     tags=["Users"],
     dependencies=[
