@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_async_session
-from app.utils.security import ROOT,ADMIN, WAREHOUSE_MANAGER, get_current_user, require_roles
+from app.core.rbac import WAREHOUSE_MAP_WRITE_ROLES
+from app.utils.security import get_current_user, require_roles
 from ..schemas import WareHouseMapSchema, WarehouseMapUpdateSchema
 from app.warehouses.services.warehouse_map_service import WarehouseMapNotFound, WarehouseMapService
 
@@ -28,7 +29,7 @@ async def get_warehouse_map(warehouse_id: int, session: AsyncSession = Depends(g
 @router.put(
     "/{warehouse_id}/map",
     response_model=WareHouseMapSchema,
-    dependencies=[Depends(require_roles(ROOT, ADMIN, WAREHOUSE_MANAGER))],
+    dependencies=[Depends(require_roles(*WAREHOUSE_MAP_WRITE_ROLES))],
 )
 async def save_warehouse_map(
     warehouse_id: int,

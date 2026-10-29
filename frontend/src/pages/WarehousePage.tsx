@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getRacks, getWarehouseMap } from '../api/warehouse';
+import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/Button';
 import { MapLayers } from '../components/map/MapLayers';
 import { ZoomControls } from '../components/map/ZoomControls';
@@ -26,6 +27,7 @@ const LEGEND = [
 
 export function WarehousePage() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const warehouseName = useWarehouseName();
   const mapQuery = useQuery({
     queryKey: ['map', WAREHOUSE_ID],
@@ -86,9 +88,11 @@ export function WarehousePage() {
         title={`Склад ${warehouseName}`}
         subtitle="Наведіть на стелаж — побачите його заповненість. Клік по стелажу відкриває його полиці."
         actions={
-          <Button variant="secondary" to="/warehouse/edit">
-            Редагувати склад
-          </Button>
+          can('warehouse_map_write') && (
+            <Button variant="secondary" to="/warehouse/edit">
+              Редагувати склад
+            </Button>
+          )
         }
       />
 
