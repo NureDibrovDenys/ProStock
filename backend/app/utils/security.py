@@ -44,11 +44,11 @@ if not SECRET_KEY:
     )
 
 # Сумісність зі старими назвами ролей
-ROOT = RoleName.ROOT.value
-ADMIN = RoleName.ADMIN.value
-WAREHOUSE_MANAGER = RoleName.WAREHOUSE_MANAGER.value
-STOREKEEPER = RoleName.WORKER.value
-GUEST = RoleName.GUEST.value
+ROOT = RoleName.ROOT
+ADMIN = RoleName.ADMIN
+WAREHOUSE_MANAGER = RoleName.WAREHOUSE_MANAGER
+STOREKEEPER = RoleName.WORKER
+GUEST = RoleName.GUEST
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -87,16 +87,19 @@ def _now() -> datetime:
 def create_access_token(
     subject: str,
     user_id: int,
-    role: str,
+    role: RoleName | str,
     expires_delta: timedelta | None = None,
 ) -> tuple[str, int]:
     """Створює access-токен. Повертає (token, expires_in_seconds)."""
     expires_delta = expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expires_at = _now() + expires_delta
+    
+    role_value: str = role.value if isinstance(role, RoleName) else str(role)
+    
     payload = {
         "sub": subject,
         "uid": user_id,
-        "role": role,
+        "role": role_value,
         "type": ACCESS_TOKEN_TYPE,
         "jti": uuid.uuid4().hex,
         "iat": int(_now().timestamp()),
@@ -179,14 +182,14 @@ async def get_current_user(
             detail="Обліковий запис заблоковано або деактивовано",
         )
 
-    role = user.role.name.value if user.role else GUEST
+    role = user.role.name if user.role else GUEST
     if role not in ALL_ROLES:
         raise _credentials_error()
 
     return {
         "id": user.id,
         "email": user.email,
-        "role": role,
+        "role": role.value,
         "status": user.status.value,
         "first_name": user.first_name,
         "last_name": user.last_name,
@@ -196,8 +199,8 @@ async def get_current_admin_user(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     if current_user["role"] not in {
-        RoleName.ADMIN.value,
-        RoleName.ROOT.value
+        ADMIN.value,
+        ROOT.value
     }:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -206,9 +209,12 @@ async def get_current_admin_user(
     return current_user
 
 
-def require_roles(*allowed_roles: str):
+def require_roles(*allowed_roles: RoleName | str):
     """Фабрика залежностей: пропускає лише вказані ролі."""
-    allowed = frozenset(allowed_roles)
+    allowed = frozenset(
+        role.value if isinstance(role, RoleName) else str(role)
+        for role in allowed_roles
+    )
 
     async def role_checker(
         current_user: dict[str, Any] = Depends(get_current_user),
@@ -224,5 +230,5 @@ def require_roles(*allowed_roles: str):
 
 
 # Готові залежності для роутерів
-require_admin = require_roles(*ADMIN_ROLES)
+require_admin = require_roles(ADMIN, ROOT)
 require_product_write = require_roles(*PRODUCT_WRITE_ROLES)

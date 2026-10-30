@@ -1,46 +1,63 @@
-"""Матриця прав доступу за ролями.
+"""
+Access rights matrix by role.
 
-Єдине місце, де описано, що дозволено кожній ролі. Використовується і для
-перевірки на бекенді (`require_roles`), і для підказок фронтенду
-(`GET /api/v1/auth/me` → `permissions`).
+A single source of truth defining the permissions for each role.
+It is used both for backend validation ('require_roles')
+    and to provide hints to the frontend ('GET /api/v1/auth/me' ==> permissions)
 """
 from __future__ import annotations
 
 from app.core.enums import RoleName
 
-# ── Ролі ───────────────────────────────────────────────────────────────────
+# Roles (Enum objects for better typing)
 
-ALL_ROLES: frozenset[str] = frozenset(role.value for role in RoleName)
+ALL_ROLES: frozenset[RoleName] = frozenset(role for role in RoleName)
 
-# Керівні ролі: повний доступ до довідників і користувачів
-ADMIN_ROLES: frozenset[str] = frozenset(
-    {
-        RoleName.ROOT.value,
-        RoleName.ADMIN.value,
-    }
-)
+# Management roles: full access to directories and users
+ADMIN_ROLES: frozenset[RoleName] = frozenset({
+        RoleName.ROOT,
+        RoleName.ADMIN,
+})
 
-# Ролі, що можуть змінювати товари (створення / редагування / імпорт)
-PRODUCT_WRITE_ROLES: frozenset[str] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER.value}
+# Roles that can modify products (creation/editing/import)
+PRODUCT_WRITE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
 
-# Видалення товарів — лише керівні ролі
-PRODUCT_DELETE_ROLES: frozenset[str] = ADMIN_ROLES
+# Deleting product — management roles only
+PRODUCT_DELETE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
-# Читання товарів — будь-який автентифікований користувач
-PRODUCT_READ_ROLES: frozenset[str] = ALL_ROLES
+# Reading products — any authenticated user
+PRODUCT_READ_ROLES: frozenset[RoleName] = ALL_ROLES
 
-# Керування обліковими записами — root та адміністратор
-USER_MANAGE_ROLES: frozenset[str] = ADMIN_ROLES
+# Account management — root and admin
+USER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
-
-def permissions_for(role: str) -> dict[str, bool]:
-    """Повертає плоский список можливостей для ролі (для UI)."""
+def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
+    """
+    Return a list of capabilities for a role (for the UI).
+    
+    Supports both a RoleName object and a string (for DB compatibility).
+    """
+    
+    # If the role is unknown to the system, return zero permissions
+    try:
+        role_enum: RoleName = RoleName(role_name)
+    except ValueError:
+        return {
+            "products_read": False,
+            "products_write": False,
+            "products_delete": False,
+            "products_import": False,
+            "products_export": False,
+            "users_manage": False,
+            "warehouse_map_write": False,
+        }
+    
     return {
-        "products_read": role in PRODUCT_READ_ROLES,
-        "products_write": role in PRODUCT_WRITE_ROLES,
-        "products_delete": role in PRODUCT_DELETE_ROLES,
-        "products_import": role in PRODUCT_WRITE_ROLES,
-        "products_export": role in PRODUCT_READ_ROLES,
-        "users_manage": role in USER_MANAGE_ROLES,
-        "warehouse_map_write": role in PRODUCT_WRITE_ROLES,
+        "products_read": role_enum in PRODUCT_READ_ROLES,
+        "products_write": role_enum in PRODUCT_WRITE_ROLES,
+        "products_delete": role_enum in PRODUCT_DELETE_ROLES,
+        "products_import": role_enum in PRODUCT_WRITE_ROLES,
+        "products_export": role_enum in PRODUCT_READ_ROLES,
+        "users_manage": role_enum in USER_MANAGE_ROLES,
+        "warehouse_map_write": role_enum in PRODUCT_WRITE_ROLES,
     }
