@@ -3,13 +3,14 @@ import type { User } from '../api/types';
 import { ROLE_LABELS, getUsers } from '../api/users';
 import { Button } from '../components/Button';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import styles from './EmployeesPage.module.css';
 
 export function EmployeesPage() {
+  const warehouseId = useCurrentWarehouse();
   const query = useQuery({
-    queryKey: ['users', WAREHOUSE_ID],
-    queryFn: () => getUsers({ warehouse_id: WAREHOUSE_ID, page_size: 100 }),
+    queryKey: ['users', warehouseId],
+    queryFn: () => getUsers({ warehouse_id: warehouseId, page_size: 100 }),
   });
   const users = query.data?.items ?? [];
   const active = users.filter((u) => u.status === 'active');

@@ -9,7 +9,7 @@ import { ZoomControls } from '../components/map/ZoomControls';
 import mapStyles from '../components/map/map.module.css';
 import { fromApi, isShape, mapBounds, type ShapeObject } from '../components/map/model';
 import { ErrorState, LoadingState, PageHeader } from '../components/ui';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useViewport } from '../hooks/useViewport';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { cx } from '../lib/cx';
@@ -28,14 +28,15 @@ const LEGEND = [
 export function WarehousePage() {
   const navigate = useNavigate();
   const { can } = useAuth();
+  const warehouseId = useCurrentWarehouse();
   const warehouseName = useWarehouseName();
   const mapQuery = useQuery({
-    queryKey: ['map', WAREHOUSE_ID],
-    queryFn: () => getWarehouseMap(WAREHOUSE_ID),
+    queryKey: ['map', warehouseId],
+    queryFn: () => getWarehouseMap(warehouseId),
   });
   const racksQuery = useQuery({
-    queryKey: ['racks', WAREHOUSE_ID],
-    queryFn: () => getRacks(WAREHOUSE_ID),
+    queryKey: ['racks', warehouseId],
+    queryFn: () => getRacks(warehouseId),
   });
 
   const objs = useMemo(() => (mapQuery.data ? fromApi(mapQuery.data) : []), [mapQuery.data]);

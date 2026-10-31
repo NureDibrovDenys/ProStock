@@ -11,6 +11,7 @@ from app.products.router import categories_router, router as products_router
 from app.routers import auth as auth_router
 from app.routers import map as map_router
 from app.users.router import router as users_router
+from app.warehouses.router import router as warehouses_router
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
@@ -52,6 +53,7 @@ app.include_router(map_router.router)
 #роутери автентифікації, користувачів, товарів
 app.include_router(auth_router.router)
 app.include_router(users_router)
+app.include_router(warehouses_router)
 app.include_router(products_router)
 app.include_router(categories_router)
 

@@ -53,7 +53,7 @@ import {
   type ShapeObject,
 } from '../components/map/model';
 import { LoadingState } from '../components/ui';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useViewport } from '../hooks/useViewport';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { cx } from '../lib/cx';
@@ -103,9 +103,10 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const ROTATE_STEP = 15;
 
 export function MapEditorPage() {
+  const warehouseId = useCurrentWarehouse();
   const query = useQuery({
-    queryKey: ['map', WAREHOUSE_ID],
-    queryFn: () => getWarehouseMap(WAREHOUSE_ID),
+    queryKey: ['map', warehouseId],
+    queryFn: () => getWarehouseMap(warehouseId),
     // Редагуємо знімок мапи — фонове оновлення не повинно перезатирати зміни
     refetchOnWindowFocus: false,
     retry: false,
@@ -123,6 +124,7 @@ export function MapEditorPage() {
       initial={query.data ? fromApi(query.data) : []}
       loadError={query.isError ? query.error : null}
       onRetry={() => query.refetch()}
+      warehouseId={warehouseId}
     />
   );
 }
@@ -142,7 +144,17 @@ type HistoryMode = 'record' | 'drag';
 /** Що не враховувати під час прив'язки (сам об'єкт, який зараз тягнуть). */
 type MagnetExclude = { roomVertex?: number; partitionId?: string };
 
-function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadError: Error | null; onRetry: () => void }) {
+function Editor({
+  initial,
+  loadError,
+  onRetry,
+  warehouseId,
+}: {
+  initial: MapObject[];
+  loadError: Error | null;
+  onRetry: () => void;
+  warehouseId: number;
+}) {
   const queryClient = useQueryClient();
   const warehouseName = useWarehouseName();
 
@@ -794,11 +806,11 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
   const racksCount = objs.filter((o) => o.t === 'rack').length;
 
   const mutation = useMutation({
-    mutationFn: (map: WarehouseMap) => saveWarehouseMap(WAREHOUSE_ID, map),
+    mutationFn: (map: WarehouseMap) => saveWarehouseMap(warehouseId, map),
     onSuccess: (saved, sent) => {
       // Бекенд повертає мапу з id нових об'єктів; якщо ні — кешуємо надіслане
-      queryClient.setQueryData(['map', WAREHOUSE_ID], saved ?? sent);
-      queryClient.invalidateQueries({ queryKey: ['racks', WAREHOUSE_ID] });
+      queryClient.setQueryData(['map', warehouseId], saved ?? sent);
+      queryClient.invalidateQueries({ queryKey: ['racks', warehouseId] });
       setDirty(false);
     },
     onError: (err) => toast.error(`Не вдалося зберегти: ${err.message}`),
@@ -828,14 +840,14 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
       format: 'prostock-warehouse-map',
       version: 1,
       unit: 'm',
-      warehouse_id: WAREHOUSE_ID,
+      warehouse_id: warehouseId,
       saved_at: new Date().toISOString(),
       ...toApi(objs),
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `warehouse-${WAREHOUSE_ID}-map.json`;
+    a.download = `warehouse-${warehouseId}-map.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -850,7 +862,7 @@ function Editor({ initial, loadError, onRetry }: { initial: MapObject[]; loadErr
         format?: string;
         warehouse_id?: number;
       };
-      if (imported.warehouse_id !== undefined && imported.warehouse_id !== WAREHOUSE_ID) {
+      if (imported.warehouse_id !== undefined && imported.warehouse_id !== warehouseId) {
         throw new Error(`Файл призначений для складу №${imported.warehouse_id}`);
       }
       const collections = ['walls', 'partitions', 'obstacles', 'entry_points', 'racks', 'zones'] as const;

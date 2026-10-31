@@ -73,7 +73,7 @@ async def create_user(
             last_name=payload.last_name.strip(),
             role=payload.role,
             status=payload.status,
-            warehouse_id=payload.warehouse_id,
+            warehouse_id=payload.warehouse_id or 1,
         )
     except crud.EmailAlreadyExistsError as exc:
         raise HTTPException(

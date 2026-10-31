@@ -206,7 +206,7 @@ def serialize_user(user) -> UserListItem:
         last_name=user.last_name,
         role=user.role.name if user.role else RoleName.GUEST,
         status=user.status,
-        warehouse_id=user.warehouse_id,
+        warehouse_id=user.warehouse_id or 1,
         position=None,
         on_shift=False,
         created_at=user.created_at,

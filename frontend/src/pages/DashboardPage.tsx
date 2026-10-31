@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getDashboard } from '../api/warehouse';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { RackFillChart } from '../components/RackFillChart';
 import { StatCard, StatGrid } from '../components/StatCard';
@@ -9,10 +9,11 @@ import { formatNumber, formatOperationTime, formatSigned, formatTime, plural } f
 import styles from './DashboardPage.module.css';
 
 export function DashboardPage() {
+  const warehouseId = useCurrentWarehouse();
   const warehouseName = useWarehouseName();
   const query = useQuery({
-    queryKey: ['dashboard', WAREHOUSE_ID],
-    queryFn: () => getDashboard(WAREHOUSE_ID),
+    queryKey: ['dashboard', warehouseId],
+    queryFn: () => getDashboard(warehouseId),
   });
   const data = query.data;
 

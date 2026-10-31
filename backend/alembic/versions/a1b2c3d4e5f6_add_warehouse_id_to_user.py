@@ -48,6 +48,7 @@ def upgrade() -> None:
         ['warehouse_id'],
         unique=False,
     )
+    op.execute("UPDATE \"user\" SET warehouse_id = 1 WHERE warehouse_id IS NULL")
 
 
 def downgrade() -> None:

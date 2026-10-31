@@ -4,6 +4,9 @@ import type { DashboardStats, RackDetails, RackSummary, Warehouse, WarehouseMap 
 /** GET /api/v1/warehouses/{id} */
 export const getWarehouse = (warehouseId: number) => request<Warehouse>(`/warehouses/${warehouseId}`);
 
+/** GET /api/v1/warehouses — доступні склади для прив'язки облікового запису. */
+export const getWarehouses = () => request<Warehouse[]>('/warehouses');
+
 /** GET /api/v1/warehouses/{id}/map */
 export async function getWarehouseMap(warehouseId: number): Promise<WarehouseMap> {
   const data = await request<Partial<WarehouseMap>>(`/warehouses/${warehouseId}/map`);

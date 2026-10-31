@@ -1,14 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader } from 'lucide-react';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { RoleName } from '../api/types';
 import { ROLE_LABELS, createUser } from '../api/users';
+import { getWarehouses } from '../api/warehouse';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { validateEmail, validateNewPassword } from '../lib/validation';
 import styles from './NewEmployeePage.module.css';
 
@@ -18,6 +20,7 @@ type FormState = {
   user_email: string;
   password: string;
   role: RoleName;
+  warehouse_id: number;
 };
 
 type Errors = Partial<Record<keyof FormState, string>>;
@@ -41,12 +44,18 @@ function validate(form: FormState): Errors {
 export function NewEmployeePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const defaultWarehouseId = useCurrentWarehouse();
+  const warehousesQuery = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: getWarehouses,
+  });
   const [form, setForm] = useState<FormState>({
     first_name: '',
     last_name: '',
     user_email: '',
     password: '',
     role: 'storekeeper',
+    warehouse_id: defaultWarehouseId,
   });
   const [errors, setErrors] = useState<Errors>({});
 
@@ -76,7 +85,7 @@ export function NewEmployeePage() {
       user_email: form.user_email.trim().toLowerCase(),
       password: form.password,
       role: form.role,
-      warehouse_id: WAREHOUSE_ID,
+      warehouse_id: form.warehouse_id,
     });
   };
 
@@ -150,6 +159,22 @@ export function NewEmployeePage() {
             ))}
           </Select>
         </div>
+
+        <Select
+          label="Склад *"
+          value={String(form.warehouse_id)}
+          onChange={(event) =>
+            setForm((prev) => ({ ...prev, warehouse_id: Number(event.target.value) }))
+          }
+          disabled={warehousesQuery.isPending || warehousesQuery.isError}
+        >
+          {warehousesQuery.data?.map((warehouse) => (
+            <option key={warehouse.warehouse_id} value={warehouse.warehouse_id}>
+              {warehouse.warehouse_name}
+            </option>
+          ))}
+          {!warehousesQuery.data?.length && <option value={defaultWarehouseId}>Склад №{defaultWarehouseId}</option>}
+        </Select>
 
         <div className={styles.roleHint}>
           {form.role === 'administrator' && 'Повний доступ: товари, користувачі, імпорт та експорт.'}

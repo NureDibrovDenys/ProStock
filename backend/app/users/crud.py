@@ -90,7 +90,7 @@ async def create_user(
     last_name: str,
     role: RoleName,
     status: UserStatus = UserStatus.ACTIVE,
-    warehouse_id: int | None = None,
+    warehouse_id: int | None = 1,
 ) -> User:
     if await session.scalar(select(User.id).where(User.email == email)):
         raise EmailAlreadyExistsError(email)
@@ -106,7 +106,7 @@ async def create_user(
         last_name=last_name,
         role_id=role_model.id,
         status=status,
-        warehouse_id=warehouse_id,
+        warehouse_id=warehouse_id or 1,
     )
     session.add(user)
     await session.commit()

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -18,6 +18,7 @@ DEFAULT_USERS: tuple[tuple[str, str, str, str, RoleName], ...] = (
     ("Олена", "Ковальчук", "MANAGER_EMAIL", "MANAGER_PASSWORD", RoleName.WAREHOUSE_MANAGER),
     ("Іван", "Петренко", "WORKER_EMAIL", "WORKER_PASSWORD", RoleName.WORKER),
 )
+DEFAULT_WAREHOUSE_ID = 1
 
 
 async def ensure_roles(session: AsyncSession) -> dict[RoleName, Role]:
@@ -56,6 +57,7 @@ async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role
                 last_name=last_name,
                 role_id=roles[role_name].id,
                 status=UserStatus.ACTIVE,
+                warehouse_id=DEFAULT_WAREHOUSE_ID,
             )
         )
         logger.info("Створено стартового користувача %s (%s)", email, role_name.value)
@@ -77,4 +79,12 @@ async def bootstrap(session: AsyncSession) -> None:
     if settings.SEED_DEFAULT_USERS:
         await ensure_default_users(session, roles)
     await ensure_default_warehouse(session)
+    from app.warehouses.models import Warehouse
+
+    if await session.scalar(select(Warehouse.id).where(Warehouse.id == DEFAULT_WAREHOUSE_ID)):
+        await session.execute(
+            update(User)
+            .where(User.warehouse_id.is_(None))
+            .values(warehouse_id=DEFAULT_WAREHOUSE_ID)
+        )
     await session.commit()

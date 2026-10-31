@@ -51,7 +51,7 @@ def _profile(user: User) -> dict:
         "role": role,
         "status": user.status.value if hasattr(user.status, "value") else str(user.status),
         "permissions": permissions_for(role),
-        "warehouse_id": user.warehouse_id,
+        "warehouse_id": user.warehouse_id or 1,
         "created_at": user.created_at,
     }
 

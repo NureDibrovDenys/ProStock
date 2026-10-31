@@ -5,7 +5,7 @@ import { getRackDetails } from '../api/warehouse';
 import { Button } from '../components/Button';
 import { StatCard, StatGrid } from '../components/StatCard';
 import { ErrorState, LoadingState, PageHeader, ProgressBar } from '../components/ui';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { formatRelativeDay, plural } from '../lib/format';
 import styles from './RackPage.module.css';
 
@@ -16,11 +16,12 @@ const SHELF_STATUS_LABELS: Record<ShelfStatus, string> = {
 };
 
 export function RackPage() {
+  const warehouseId = useCurrentWarehouse();
   const { rackCode = '' } = useParams();
 
   const query = useQuery({
-    queryKey: ['rack', WAREHOUSE_ID, rackCode],
-    queryFn: () => getRackDetails(WAREHOUSE_ID, rackCode),
+    queryKey: ['rack', warehouseId, rackCode],
+    queryFn: () => getRackDetails(warehouseId, rackCode),
   });
   const rack = query.data;
 

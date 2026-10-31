@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { getWarehouse } from '../api/warehouse';
-import { WAREHOUSE_ID } from '../config';
+import { useCurrentWarehouse } from './useCurrentWarehouse';
 
 /** Назва поточного складу; поки бекенд не відповів — «№ id». */
 export function useWarehouseName(): string {
-  const query = useQuery({ queryKey: ['warehouse', WAREHOUSE_ID], queryFn: () => getWarehouse(WAREHOUSE_ID) });
-  return query.data?.warehouse_name ?? `№ ${WAREHOUSE_ID}`;
+  const warehouseId = useCurrentWarehouse();
+  const query = useQuery({ queryKey: ['warehouse', warehouseId], queryFn: () => getWarehouse(warehouseId) });
+  return query.data?.warehouse_name ?? `№ ${warehouseId}`;
 }

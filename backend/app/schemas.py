@@ -226,6 +226,7 @@ class AuthUserSchema(BaseModel):
     last_name: str
     role: str
     status: str
+    warehouse_id: int
     permissions: dict[str, bool]
 
 
@@ -235,5 +236,4 @@ class AuthResponseSchema(TokenSchema):
 
 class ProfileSchema(AuthUserSchema):
     created_at: datetime
-
 
