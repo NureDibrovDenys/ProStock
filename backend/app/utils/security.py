@@ -193,21 +193,12 @@ async def get_current_user(
     }
 
 
-def require_roles(*allowed_roles: str):
-    """Фабрика залежностей: пропускає лише вказані ролі."""
-    allowed = frozenset(allowed_roles)
+from app.utils.role_checker import RoleChecker
 
-    async def role_checker(
-        current_user: dict[str, Any] = Depends(get_current_user),
-    ) -> dict[str, Any]:
-        if current_user["role"] not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостатньо прав для виконання цієї операції",
-            )
-        return current_user
 
-    return role_checker
+def require_roles(*allowed_roles: str) -> RoleChecker:
+    """Створює залежність, яка пропускає лише вказані ролі."""
+    return RoleChecker(*allowed_roles)
 
 
 # Готові залежності для роутерів
