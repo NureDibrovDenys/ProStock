@@ -40,6 +40,7 @@ async def list_users(
     search: str | None = None,
     role: RoleName | None = None,
     status: UserStatus | None = None,
+    warehouse_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[User], int]:
@@ -59,6 +60,8 @@ async def list_users(
         conditions.append(User.role_id == select(Role.id).where(Role.name == role).scalar_subquery())
     if status is not None:
         conditions.append(User.status == status)
+    if warehouse_id is not None:
+        conditions.append(User.warehouse_id == warehouse_id)
 
     total = await session.scalar(
         select(func.count(User.id)).where(*conditions)
@@ -87,6 +90,7 @@ async def create_user(
     last_name: str,
     role: RoleName,
     status: UserStatus = UserStatus.ACTIVE,
+    warehouse_id: int | None = None,
 ) -> User:
     if await session.scalar(select(User.id).where(User.email == email)):
         raise EmailAlreadyExistsError(email)
@@ -102,6 +106,7 @@ async def create_user(
         last_name=last_name,
         role_id=role_model.id,
         status=status,
+        warehouse_id=warehouse_id,
     )
     session.add(user)
     await session.commit()
@@ -118,6 +123,7 @@ async def update_user(
     last_name: str | None = None,
     role: RoleName | None = None,
     status: UserStatus | None = None,
+    warehouse_id: int | None | type[...] = ...,  # sentinel: ... = не змінювати
 ) -> User:
     if email is not None and email != user.email:
         exists = await session.scalar(
@@ -135,6 +141,9 @@ async def update_user(
         user.last_name = last_name
     if status is not None:
         user.status = status
+    # warehouse_id: None — явно відв'язати, int — прив'язати, ... — не чіпати
+    if warehouse_id is not ...:
+        user.warehouse_id = warehouse_id  # type: ignore[assignment]
 
     if role is not None and (user.role is None or user.role.name != role):
         role_model = await get_role_by_name(session, role)

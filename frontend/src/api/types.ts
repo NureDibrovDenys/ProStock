@@ -158,6 +158,7 @@ export interface User {
   last_name: string;
   role: RoleName;
   status: UserStatus;
+  warehouse_id: number | null;
   /** Посада для відображення ("Водій навантажувача"). null — показується назва ролі. */
   position: string | null;
   on_shift: boolean;
@@ -283,6 +284,8 @@ export interface AuthUser {
   last_name: string;
   role: RoleName | 'guest';
   status: UserStatus;
+  /** ID складу, до якого прив'язаний обліковий запис. null — не прив'язаний (адміністратор). */
+  warehouse_id: number | null;
   permissions: Record<Permission, boolean>;
 }
 

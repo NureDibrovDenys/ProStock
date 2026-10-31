@@ -38,8 +38,7 @@ async def list_users(
     user_status: UserStatus | None = Query(None, alias="status", description="Фільтр за статусом"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    # Приймається для сумісності з UI; прив'язки користувача до складу в моделі ще немає
-    warehouse_id: int | None = Query(None, gt=0, include_in_schema=False),
+    warehouse_id: int | None = Query(None, gt=0, description="Фільтр за складом"),
     session: AsyncSession = Depends(get_async_session),
 ):
     users, total = await crud.list_users(
@@ -47,6 +46,7 @@ async def list_users(
         search=search,
         role=role,
         status=user_status,
+        warehouse_id=warehouse_id,
         page=page,
         page_size=page_size,
     )
@@ -73,6 +73,7 @@ async def create_user(
             last_name=payload.last_name.strip(),
             role=payload.role,
             status=payload.status,
+            warehouse_id=payload.warehouse_id,
         )
     except crud.EmailAlreadyExistsError as exc:
         raise HTTPException(
@@ -129,6 +130,9 @@ async def update_user(
             detail="Не можна деактивувати власний обліковий запис",
         )
 
+    # warehouse_id: передаємо sentinel ..., якщо поле не було у запиті
+    wh_sentinel = payload.warehouse_id if payload.warehouse_id is not None else ...
+
     try:
         updated = await crud.update_user(
             session,
@@ -139,6 +143,7 @@ async def update_user(
             last_name=payload.last_name.strip() if payload.last_name else None,
             role=payload.role,
             status=payload.status,
+            warehouse_id=wh_sentinel,
         )
     except crud.EmailAlreadyExistsError as exc:
         raise HTTPException(

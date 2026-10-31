@@ -20,6 +20,7 @@ from sqlalchemy.orm import (
 
 from app.core.enums import UnitOfMeasure, SupplierStatus
 from app.core.db import Base
+from app.core.validators import validate_positive_decimal, validate_non_negative_decimal
 
 class Category(Base):
     __tablename__ = 'category'
@@ -132,52 +133,25 @@ class Product(Base):
         ),
     )
     
-    @staticmethod
-    def _validate_positive_decimal(key, value) -> Decimal:
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            decimal_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if decimal_value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        
-        return decimal_value
-    
     @validates("width")
     def validate_product_width(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
     @validates("length")
     def validate_product_length(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
     @validates("height")
     def validate_product_height(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
+
+    @validates("weight")
+    def validate_product_weight(self, key, value):
+        return validate_positive_decimal(key, value)
     
     @validates("min_stock_level")
     def validate_min_stock_level(self, key, value):
-        if value is None:
-            return None
-        try:
-            decimal_value = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        if decimal_value < 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value cannot be negative (obtained: {value!r})"
-            )
-        return decimal_value
+        return validate_non_negative_decimal(key, value)
     
     def __repr__(self) -> str:
         return f"Product(id={self.id!r}, name={self.name!r}, SKU={self.sku_code!r})"

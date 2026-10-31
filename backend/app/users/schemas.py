@@ -133,6 +133,7 @@ class UserListItem(BaseModel):
     last_name: str
     role: RoleName
     status: UserStatus
+    warehouse_id: int | None = None
     position: str | None = None
     on_shift: bool = False
     created_at: datetime
@@ -151,7 +152,6 @@ class UserCreatePayload(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     role: RoleName = RoleName.WORKER
     status: UserStatus = UserStatus.ACTIVE
-    # Поки що не зберігається в моделі, але приймається для сумісності з UI
     warehouse_id: int | None = Field(None, gt=0)
 
     @field_validator("user_email")
@@ -176,6 +176,7 @@ class UserUpdatePayload(BaseModel):
     password: str | None = Field(None, min_length=8, max_length=128)
     role: RoleName | None = None
     status: UserStatus | None = None
+    warehouse_id: int | None = Field(None, gt=0)
 
     @field_validator("user_email")
     @classmethod
@@ -205,6 +206,7 @@ def serialize_user(user) -> UserListItem:
         last_name=user.last_name,
         role=user.role.name if user.role else RoleName.GUEST,
         status=user.status,
+        warehouse_id=user.warehouse_id,
         position=None,
         on_shift=False,
         created_at=user.created_at,

@@ -1,4 +1,6 @@
+from __future__ import annotations
 from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy import (
     BigInteger,
     DateTime,
@@ -16,6 +18,9 @@ from sqlalchemy.orm import (
 
 from app.core.enums import RoleName, UserStatus
 from app.core.db import Base
+
+if TYPE_CHECKING:
+    from app.warehouses.models import Warehouse
 
 
 class Role(Base):
@@ -90,6 +95,16 @@ class User(Base):
         default=UserStatus.ACTIVE,
         server_default=UserStatus.ACTIVE.value,
     )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        "warehouse_id",
+        BigInteger,
+        ForeignKey(
+            "warehouse.warehouse_id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -100,6 +115,11 @@ class User(Base):
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan"
+    )
+    warehouse: Mapped["Warehouse | None"] = relationship(
+        "Warehouse",
+        foreign_keys=[warehouse_id],
+        lazy="select",
     )
     
     __table_args__ = (

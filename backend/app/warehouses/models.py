@@ -27,6 +27,11 @@ from app.core.enums import (
     InactiveReason,
 )
 from app.core.db import Base
+from app.core.validators import (
+    validate_positive_decimal,
+    validate_non_negative_decimal,
+    validate_rotation_angle,
+)
 
 
 class Warehouse(Base):
@@ -90,13 +95,9 @@ class Warehouse(Base):
         ),
     )
     
-    @validates("total_warehouse_area")
+    @validates("total_area")
     def validate_total_warehouse_area(self, key, value):
-        if value is not None and value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be positive (obtained: {value!r})"
-            )
-        return value
+        return validate_positive_decimal(key, value)
     
     def __repr__(self) -> str:
         return f"Warehouse(id={self.id!r}, name={self.name!r})>"
@@ -155,36 +156,17 @@ class WarehouseGrid(Base):
         ),
     )
     
-    @staticmethod
-    def _validate_positive_decimal(key, value) -> Decimal:
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            decimal_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if decimal_value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        
-        return decimal_value
-        
     @validates("cell_size")
     def validate_cell_size(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
 
     @validates("grid_width")
     def validate_grid_width(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
 
     @validates("grid_height")
     def validate_grid_height(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
     def __repr__(self) -> str:
         return f"WarehouseGrid(id={self.id!r}, warehouse_id={self.warehouse_id!r})"
@@ -241,20 +223,17 @@ class WarehouseWall(Base):
     @validates("vertex_order")
     def validate_vertex_order(self, key, value):
         if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
+            raise ValueError(f"Атрибут {key!r} не може бути None")
         try:
             integer_value: int = int(str(value))
         except (TypeError, ValueError):
             raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
+                f"Атрибут {key!r} має бути числом (отримано: {value!r})"
             )
-        
         if integer_value <= 0:
             raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
+                f"Атрибут {key!r} має бути додатним (отримано: {value!r})"
             )
-        
         return integer_value
 
     def __repr__(self) -> str:
@@ -324,6 +303,16 @@ class WarehousePartition(Base):
             name="check_partition_height"
         ),
     )
+
+    @validates("thickness")
+    def validate_thickness(self, key, value):
+        return validate_positive_decimal(key, value)
+
+    @validates("height")
+    def validate_height(self, key, value):
+        if value is None:
+            return None
+        return validate_positive_decimal(key, value)
 
     def __repr__(self) -> str:
         return f"WarehousePartition(id={self.id!r}, warehouse_id={self.warehouse_id!r})"
@@ -415,40 +404,23 @@ class WarehouseObstacle(Base):
         ),
     )
     
-    @staticmethod
-    def _validate_positive_decimal(key, value) -> Decimal:
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            decimal_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if decimal_value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        
-        return decimal_value
-    
     @validates("width")
     def validate_obstacle_width(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
     @validates("length")
     def validate_obstacle_length(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
+
+    @validates("rotation_angle")
+    def validate_obstacle_rotation(self, key, value):
+        return validate_rotation_angle(key, value)
     
     @validates("max_height")
     def validate_max_height(self, key, value):
-        if value is not None and value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        return value
+        if value is None:
+            return None
+        return validate_positive_decimal(key, value)
 
     def __repr__(self) -> str:
         return f"WarehouseObstacle(id={self.id!r}, warehouse_id={self.warehouse_id!r})"
@@ -589,40 +561,23 @@ class Zone(Base):
         ),
     )
     
-    @staticmethod
-    def _validate_positive_decimal(key, value) -> Decimal:
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            decimal_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if decimal_value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        
-        return decimal_value
-    
-    @validates("zone_width")
+    @validates("width")
     def validate_zone_width(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
-    @validates("zone_length")
+    @validates("length")
     def validate_zone_length(self, key, value):
-        return self._validate_positive_decimal(key, value)
-    
+        return validate_positive_decimal(key, value)
+
+    @validates("rotation_angle")
+    def validate_zone_rotation(self, key, value):
+        return validate_rotation_angle(key, value)
+
     @validates("max_capacity_m3")
     def validate_max_capacity_m3(self, key, value):
-        if value is not None and value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        return value
+        if value is None:
+            return None
+        return validate_positive_decimal(key, value)
 
     def __repr__(self) -> str:
         return f"Zone(id={self.id!r}, name='{self.name!r}')"
@@ -709,57 +664,23 @@ class Rack(Base):
         ),
     )
     
-    @staticmethod
-    def _validate_positive_decimal(key, value) -> Decimal:
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            decimal_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if decimal_value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        
-        return decimal_value
-    
-    @validates("rack_width")
+    @validates("width")
     def validate_rack_width(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
-    @validates("rack_length")
+    @validates("length")
     def validate_rack_length(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
     @validates("rotation_angle")
-    def validate_rotation_angle(self, key, value):
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            rotation_angle_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if rotation_angle_value < 0 or rotation_angle_value >= 360:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be in range [0, 360) (obtained: {value!r})"
-            )
-        
-        return rotation_angle_value
+    def validate_rack_rotation(self, key, value):
+        return validate_rotation_angle(key, value)
     
     @validates("shelves_count")
     def validate_shelves_count(self, key, value):
         if value <= 0:
             raise ValueError(
-                f"Error: attribute {key!r} min value must be 1 (obtained: {value!r})"
+                f"Атрибут {key!r} має бути >= 1 (отримано: {value!r})"
             )
         return value
 
@@ -866,40 +787,21 @@ class Shelf(Base):
         ),
     )
     
-    @staticmethod
-    def _validate_positive_decimal(key, value) -> Decimal:
-        if value is None:
-            raise ValueError(f"Error: attribute {key!r} cannot be None")
-        
-        try:
-            decimal_value: Decimal = Decimal(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"Error: attribute {key!r} must be a valid number (obtained: {value!r})"
-            )
-        
-        if decimal_value <= 0:
-            raise ValueError(
-                f"Error: attribute {key!r} value must be a positive (obtained: {value!r})"
-            )
-        
-        return decimal_value
-    
-    @validates("shelf_width")
+    @validates("width")
     def validate_shelf_width(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
-    @validates("shelf_length")
+    @validates("length")
     def validate_shelf_length(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
-    @validates("shelf_height")
+    @validates("height")
     def validate_shelf_height(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
     
-    @validates("shelf_max_weight")
+    @validates("max_weight")
     def validate_shelf_max_weight(self, key, value):
-        return self._validate_positive_decimal(key, value)
+        return validate_positive_decimal(key, value)
 
     def occupy(self):
         self.is_occupied = True
