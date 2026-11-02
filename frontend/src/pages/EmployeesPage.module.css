@@ -95,6 +95,12 @@
   font-size: 14px;
 }
 
+.statusAction {
+  padding: 7px 14px;
+  min-height: 34px;
+  font-size: 13px;
+}
+
 .muted {
   color: var(--color-muted);
   font-size: 14px;

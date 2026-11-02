@@ -8,6 +8,7 @@ interface ConfirmDialogProps {
   message: string;
   details?: string;
   confirmLabel?: string;
+  busyLabel?: string;
   busy?: boolean;
   error?: string | null;
   onConfirm: () => void;
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   message,
   details,
   confirmLabel = 'Видалити',
+  busyLabel = 'Видалення…',
   busy = false,
   error,
   onConfirm,
@@ -38,7 +40,7 @@ export function ConfirmDialog({
           <Button variant="cancel" onClick={onConfirm} disabled={busy}>
             {busy ? (
               <>
-                <Loader size={16} className="spin" aria-hidden /> Видалення…
+                <Loader size={16} className="spin" aria-hidden /> {busyLabel}
               </>
             ) : (
               confirmLabel

@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { NewUser, RoleName, User, UserList } from './types';
+import type { NewUser, RoleName, User, UserList, UserStatus } from './types';
 
 /** GET /api/v1/users — сторінка співробітників. */
 export const getUsers = (params: { page?: number; page_size?: number; search?: string; role?: RoleName; warehouse_id?: number } = {}) =>
@@ -17,7 +17,7 @@ export const getUsers = (params: { page?: number; page_size?: number; search?: s
 export const createUser = (data: NewUser) => request<User>('/users', { method: 'POST', body: data });
 
 /** PATCH /api/v1/users/{id} */
-export const updateUser = (userId: number, data: Partial<NewUser>) =>
+export const updateUser = (userId: number, data: Partial<NewUser> & { status?: UserStatus }) =>
   request<User>(`/users/${userId}`, { method: 'PATCH', body: data });
 
 /** DELETE /api/v1/users/{id} */

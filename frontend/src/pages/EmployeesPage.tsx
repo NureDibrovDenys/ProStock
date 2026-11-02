@@ -1,12 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
-import type { User } from '../api/types';
-import { ROLE_LABELS, getUsers } from '../api/users';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { ApiError } from '../api/client';
+import type { User, UserStatus } from '../api/types';
+import { ROLE_LABELS, getUsers, updateUser } from '../api/users';
 import { Button } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
+import { useAuth } from '../auth/AuthContext';
 import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import styles from './EmployeesPage.module.css';
 
 export function EmployeesPage() {
+  const { session, can } = useAuth();
+  const queryClient = useQueryClient();
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
   const warehouseId = useCurrentWarehouse();
   const query = useQuery({
     queryKey: ['users', warehouseId],
@@ -14,6 +21,15 @@ export function EmployeesPage() {
   });
   const users = query.data?.items ?? [];
   const active = users.filter((u) => u.status === 'active');
+  const statusMutation = useMutation({
+    mutationFn: ({ userId, status }: { userId: number; status: UserStatus }) =>
+      updateUser(userId, { status }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      setPendingUser(null);
+    },
+  });
+  const canManageUsers = can('users_manage');
 
   return (
     <>
@@ -51,18 +67,67 @@ export function EmployeesPage() {
             ) : (
               <ul className={styles.rows}>
                 {users.map((u) => (
-                  <EmployeeRow key={u.user_id} user={u} />
+                  <EmployeeRow
+                    key={u.user_id}
+                    user={u}
+                    canManageUsers={canManageUsers}
+                    isCurrentUser={u.user_id === session?.user.user_id}
+                    onToggleStatus={setPendingUser}
+                  />
                 ))}
               </ul>
             )}
           </section>
         </div>
       )}
+      {pendingUser && (
+        <ConfirmDialog
+          title={pendingUser.status === 'active' ? 'Деактивувати обліковий запис?' : 'Активувати обліковий запис?'}
+          message={`${pendingUser.first_name} ${pendingUser.last_name}`}
+          details={
+            pendingUser.status === 'active'
+              ? 'Користувач не зможе увійти до системи, доки обліковий запис не буде активовано.'
+              : 'Користувач знову отримає доступ до системи.'
+          }
+          confirmLabel={pendingUser.status === 'active' ? 'Деактивувати' : 'Активувати'}
+          busyLabel="Збереження…"
+          busy={statusMutation.isPending}
+          error={
+            statusMutation.error instanceof ApiError
+              ? statusMutation.error.message
+              : statusMutation.isError
+                ? 'Не вдалося змінити статус облікового запису'
+                : null
+          }
+          onClose={() => {
+            if (!statusMutation.isPending) {
+              statusMutation.reset();
+              setPendingUser(null);
+            }
+          }}
+          onConfirm={() =>
+            statusMutation.mutate({
+              userId: pendingUser.user_id,
+              status: pendingUser.status === 'active' ? 'inactive' : 'active',
+            })
+          }
+        />
+      )}
     </>
   );
 }
 
-function EmployeeRow({ user: u }: { user: User }) {
+function EmployeeRow({
+  user: u,
+  canManageUsers,
+  isCurrentUser,
+  onToggleStatus,
+}: {
+  user: User;
+  canManageUsers: boolean;
+  isCurrentUser: boolean;
+  onToggleStatus: (user: User) => void;
+}) {
   return (
     <li className={styles.row}>
       <Avatar firstName={u.first_name} lastName={u.last_name} />
@@ -74,6 +139,16 @@ function EmployeeRow({ user: u }: { user: User }) {
       </div>
       <p className={styles.position}>{u.position ?? ROLE_LABELS[u.role] ?? u.role}</p>
       <UserStatusBadge status={u.status} />
+      {canManageUsers && !isCurrentUser && (
+        <Button
+          variant="secondary"
+          className={styles.statusAction}
+          onClick={() => onToggleStatus(u)}
+          aria-label={`${u.status === 'active' ? 'Деактивувати' : 'Активувати'} ${u.first_name} ${u.last_name}`}
+        >
+          {u.status === 'active' ? 'Вимкнути' : 'Увімкнути'}
+        </Button>
+      )}
     </li>
   );
 }
