@@ -165,6 +165,30 @@ class UserCreatePayload(BaseModel):
         return validate_password_strength(value)
 
 
+class StorekeeperCreatePayload(BaseModel):
+    """дані для створення облікового запису комірника менеджером"""
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    
+    user_email: EmailStr = Field(
+        ...,
+        validation_alias=AliasChoices("user_email", "email"),
+        serialization_alias="user_email",
+    )
+    
+    password: str = Field(..., min_length=8, max_length=128)
+    
+    @field_validator("user_email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+         return validate_password_strength(value)
+
+    
 class UserUpdatePayload(BaseModel):
     first_name: str | None = Field(None, min_length=1, max_length=100)
     last_name: str | None = Field(None, min_length=1, max_length=100)
@@ -211,3 +235,4 @@ def serialize_user(user) -> UserListItem:
         on_shift=False,
         created_at=user.created_at,
     )
+
