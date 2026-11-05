@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from typing import Any
 
@@ -27,7 +29,6 @@ EMAIL_PATTERN: re.Pattern[str] = re.compile(
 Централізована реалізація позбавляє від дублювання `_validate_positive_decimal`
 у кожній моделі (WarehouseGrid, WarehouseObstacle, Zone, Rack, Shelf, Product…).
 """
-from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 

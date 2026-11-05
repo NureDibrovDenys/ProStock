@@ -99,7 +99,7 @@ async def _issue_session(
     access_token, expires_in = create_access_token(
         subject=user.email,
         user_id=user.id,
-        role=user.role.name.value if user.role else "guest",
+        role_name=user.role.name.value if user.role else "guest",
     )
     raw_refresh, refresh_expires_at = create_refresh_token(user.id)
 

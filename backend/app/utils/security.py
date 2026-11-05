@@ -133,7 +133,7 @@ def create_access_token(
     return (
         jwt.encode(
             payload,
-            SECRET_KEY,
+            SECRET_KEY.get_secret_value(),
             algorithm=ALGORITHM
         ),
         int(expires_delta.total_seconds())
@@ -161,7 +161,7 @@ def create_refresh_token(
     return (
         jwt.encode(
             payload,
-            SECRET_KEY,
+            SECRET_KEY.get_secret_value(),
             algorithm=ALGORITHM
         ),
         expires_at

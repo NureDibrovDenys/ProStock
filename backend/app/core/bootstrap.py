@@ -34,7 +34,25 @@ async def ensure_roles(session: AsyncSession) -> dict[RoleName, Role]:
     return existing
 
 
-async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role]) -> None:
+async def ensure_default_warehouse(session: AsyncSession) -> int:
+    """Створює склад за замовчуванням, якщо складів ще немає, і повертає його ID."""
+    from app.warehouses.models import Warehouse
+
+    # Перевіряємо, чи є хоча б один склад
+    warehouse_id = await session.scalar(select(Warehouse.id).limit(1))
+    
+    if not warehouse_id:
+        # Площа-заглушка: перерахується з контуру стін під час першого збереження мапи
+        warehouse = Warehouse(name="Основний склад", total_area=Decimal("1.00"))
+        session.add(warehouse)
+        await session.flush()  # Одразу отримуємо згенерований ID нового складу
+        warehouse_id = warehouse.id
+        logger.info("Створено склад за замовчуванням з ID: %s", warehouse_id)
+        
+    return warehouse_id
+
+
+async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role], warehouse_id: int) -> None:
     """Створює стартові акаунти, якщо їх ще немає (лише коли SEED_DEFAULT_USERS)."""
     # Імпорт усередині функції, щоб уникнути циклічної залежності
     from app.utils.security import hash_password
@@ -52,39 +70,34 @@ async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role
         session.add(
             User(
                 email=email,
-                password_hash=hash_password(password),
+                password_hash=hash_password(password.get_secret_value()),
                 first_name=first_name,
                 last_name=last_name,
                 role_id=roles[role_name].id,
                 status=UserStatus.ACTIVE,
-                warehouse_id=DEFAULT_WAREHOUSE_ID,
+                warehouse_id=warehouse_id,
             )
         )
         logger.info("Створено стартового користувача %s (%s)", email, role_name.value)
 
 
-async def ensure_default_warehouse(session: AsyncSession) -> None:
-    """Створює склад за замовчуванням, якщо складів ще немає (з ним працює редактор мапи)."""
-    from app.warehouses.models import Warehouse
-
-    if await session.scalar(select(Warehouse.id).limit(1)):
-        return
-    # Площа-заглушка: перерахується з контуру стін під час першого збереження мапи
-    session.add(Warehouse(name="Основний склад", total_area=Decimal("1.00")))
-    logger.info("Створено склад за замовчуванням")
-
-
 async def bootstrap(session: AsyncSession) -> None:
+    # 1. Спершу створюємо ролі
     roles = await ensure_roles(session)
+    
+    # 2. Обов'язково створюємо склад ПЕРШИМ, щоб отримати його дійсний ID
+    warehouse_id = await ensure_default_warehouse(session)
+    
+    # 3. Створюємо користувачів, передаючи їм правильний warehouse_id
     if settings.SEED_DEFAULT_USERS:
-        await ensure_default_users(session, roles)
-    await ensure_default_warehouse(session)
-    from app.warehouses.models import Warehouse
+        await ensure_default_users(session, roles, warehouse_id=warehouse_id)
 
-    if await session.scalar(select(Warehouse.id).where(Warehouse.id == DEFAULT_WAREHOUSE_ID)):
-        await session.execute(
-            update(User)
-            .where(User.warehouse_id.is_(None))
-            .values(warehouse_id=DEFAULT_WAREHOUSE_ID)
-        )
+    # Захист на випадок, якщо користувачі вже існували раніше без складу
+    await session.execute(
+        update(User)
+        .where(User.warehouse_id.is_(None))
+        .values(warehouse_id=warehouse_id)
+    )
+    
     await session.commit()
+    logger.info("Bootstrap успішно завершено!")
