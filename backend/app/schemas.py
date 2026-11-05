@@ -6,6 +6,8 @@ from typing_extensions import Annotated
 
 from app.core.enums import ObstacleType, PointType, ZoneType
 
+from app.users.schemas import normalize_and_validate_email
+
 # Формат мапи узгоджений із фронтом (frontend/API.md, розділ «Мапа складу»).
 # Одиниці — метри, coord_x/coord_y — центр об'єкта, rotation_angle — градуси за годинниковою стрілкою.
 # length — розмір уздовж власної осі X об'єкта (до повороту), width — уздовж осі Y.
@@ -200,8 +202,7 @@ class UserLoginSchema(BaseModel):
     @field_validator("email")
     @classmethod
     def normalize_login_email(cls, value: str) -> str:
-        from app.users.schemas import normalize_email
-        return normalize_email(value)
+        return normalize_and_validate_email(value)
 
     @field_validator("password")
     @classmethod

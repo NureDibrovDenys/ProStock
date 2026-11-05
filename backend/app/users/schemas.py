@@ -221,7 +221,7 @@ class StorekeeperCreatePayload(BaseModel):
     @field_validator("user_email")
     @classmethod
     def validate_email(cls, value: str) -> str:
-        return normalize_email(value)
+        return normalize_and_validate_email(value)
 
     @field_validator("password")
     @classmethod
