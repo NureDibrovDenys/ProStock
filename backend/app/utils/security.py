@@ -177,7 +177,7 @@ def decode_token(
     try:
         payload: dict[str, Any] = jwt.decode(
             raw_token,
-            SECRET_KEY,
+            SECRET_KEY.get_secret_value(),
             algorithms=[ALGORITHM]
         )
     except JWTError as e:
