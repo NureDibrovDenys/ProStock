@@ -169,6 +169,7 @@ async def create_user(
     last_name: str,
     role_name: RoleName,
     user_status: UserStatus = UserStatus.ACTIVE,
+    warehouse_id: int | None = None
 ) -> User:
     user_id_stmt = (
         select(User.id)
@@ -189,6 +190,7 @@ async def create_user(
         last_name=last_name,
         role_id=role.id,
         status=user_status,
+        warehouse_id = warehouse_id
     )
     session.add(user)
     try:
