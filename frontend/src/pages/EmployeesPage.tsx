@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError } from '../api/client';
 import type { User, UserStatus } from '../api/types';
-import { ROLE_LABELS, getUsers, updateUser } from '../api/users';
+import { ROLE_LABELS, getStorekeepers, getUsers, updateUser } from '../api/users';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
@@ -15,9 +15,12 @@ export function EmployeesPage() {
   const queryClient = useQueryClient();
   const [pendingUser, setPendingUser] = useState<User | null>(null);
   const warehouseId = useCurrentWarehouse();
+  // Менеджер складу бачить і редагує лише комірників свого складу
+  const isManagerMode = !can('users_manage') && can('storekeepers_manage');
   const query = useQuery({
-    queryKey: ['users', warehouseId],
-    queryFn: () => getUsers({ warehouse_id: warehouseId, page_size: 100 }),
+    queryKey: ['users', isManagerMode ? 'storekeepers' : warehouseId],
+    queryFn: () =>
+      isManagerMode ? getStorekeepers({ page_size: 100 }) : getUsers({ warehouse_id: warehouseId, page_size: 100 }),
   });
   const users = query.data?.items ?? [];
   const active = users.filter((u) => u.status === 'active');
@@ -34,9 +37,9 @@ export function EmployeesPage() {
   return (
     <>
       <PageHeader
-        title="Співробітники"
+        title={isManagerMode ? 'Комірники складу' : 'Співробітники'}
         subtitle={query.data ? `Усього ${query.data.total} · активних ${active.length}` : undefined}
-        actions={<Button to="/employees/new">+ Додати співробітника</Button>}
+        actions={<Button to="/employees/new">{isManagerMode ? '+ Додати комірника' : '+ Додати співробітника'}</Button>}
       />
 
       {query.isPending && <LoadingState />}
@@ -71,6 +74,7 @@ export function EmployeesPage() {
                     key={u.user_id}
                     user={u}
                     canManageUsers={canManageUsers}
+                    canEdit={isManagerMode}
                     isCurrentUser={u.user_id === session?.user.user_id}
                     onToggleStatus={setPendingUser}
                   />
@@ -120,11 +124,13 @@ export function EmployeesPage() {
 function EmployeeRow({
   user: u,
   canManageUsers,
+  canEdit,
   isCurrentUser,
   onToggleStatus,
 }: {
   user: User;
   canManageUsers: boolean;
+  canEdit: boolean;
   isCurrentUser: boolean;
   onToggleStatus: (user: User) => void;
 }) {
@@ -139,6 +145,11 @@ function EmployeeRow({
       </div>
       <p className={styles.position}>{u.position ?? ROLE_LABELS[u.role] ?? u.role}</p>
       <UserStatusBadge status={u.status} />
+      {canEdit && (
+        <Button variant="secondary" className={styles.statusAction} to={`/employees/${u.user_id}/edit`}>
+          Редагувати
+        </Button>
+      )}
       {canManageUsers && !isCurrentUser && (
         <Button
           variant="secondary"

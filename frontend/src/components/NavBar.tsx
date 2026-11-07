@@ -6,13 +6,13 @@ import { useAuth } from '../auth/AuthContext';
 import { cx } from '../lib/cx';
 import styles from './NavBar.module.css';
 
-type Tab = { to: string; label: string; end: boolean; permission: Permission | null };
+/** Вкладка видима, якщо є хоча б одне з прав (null — для всіх). */
+type Tab = { to: string; label: string; end: boolean; permission: Permission[] | null };
 
 const TABS: Tab[] = [
-  { to: '/products', label: 'Товари', end: false, permission: 'products_read' },
-  { to: '/employees', label: 'Співробітники', end: false, permission: 'users_manage' },
-  // Менеджер складу поки має лише форму створення комірника (список — окрема задача US-5)
-  { to: '/employees/new', label: 'Співробітники', end: false, permission: 'storekeepers_manage' },
+  { to: '/products', label: 'Товари', end: false, permission: ['products_read'] },
+  // Адміністратор бачить усіх співробітників, менеджер складу — комірників свого складу
+  { to: '/employees', label: 'Співробітники', end: false, permission: ['users_manage', 'storekeepers_manage'] },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
 ];
 
@@ -25,7 +25,7 @@ export function NavBar() {
     navigate('/login', { replace: true });
   };
 
-  const visibleTabs = TABS.filter((tab) => !tab.permission || can(tab.permission));
+  const visibleTabs = TABS.filter((tab) => !tab.permission || tab.permission.some(can));
   const user = session?.user;
 
   return (
@@ -42,7 +42,7 @@ export function NavBar() {
             end={tab.end}
             className={({ isActive }) => cx(styles.tab, isActive && styles.active)}
           >
-            {tab.to.startsWith('/employees') && <Users size={16} aria-hidden />}
+            {tab.to === '/employees' && <Users size={16} aria-hidden />}
             {tab.to === '/warehouse' && <Warehouse size={16} aria-hidden />}
             {tab.to === '/products' && <Package size={16} aria-hidden />}
             {tab.label}

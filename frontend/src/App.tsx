@@ -32,8 +32,16 @@ export function App() {
           <Route
             path="/employees"
             element={
-              <RequirePermission permission="users_manage">
+              <RequirePermission permission={['users_manage', 'storekeepers_manage']}>
                 <EmployeesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/employees/:userId/edit"
+            element={
+              <RequirePermission permission="storekeepers_manage">
+                <NewEmployeePage />
               </RequirePermission>
             }
           />
