@@ -1,15 +1,20 @@
 import { LogOut, Package, Users, Warehouse } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import type { Permission } from '../api/types';
 import { ROLE_LABELS } from '../api/users';
 import { useAuth } from '../auth/AuthContext';
 import { cx } from '../lib/cx';
 import styles from './NavBar.module.css';
 
-const TABS = [
+type Tab = { to: string; label: string; end: boolean; permission: Permission | null };
+
+const TABS: Tab[] = [
   { to: '/products', label: 'Товари', end: false, permission: 'products_read' },
   { to: '/employees', label: 'Співробітники', end: false, permission: 'users_manage' },
+  // Менеджер складу поки має лише форму створення комірника (список — окрема задача US-5)
+  { to: '/employees/new', label: 'Співробітники', end: false, permission: 'storekeepers_manage' },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
-] as const;
+];
 
 export function NavBar() {
   const { session, logout, can } = useAuth();
@@ -37,7 +42,7 @@ export function NavBar() {
             end={tab.end}
             className={({ isActive }) => cx(styles.tab, isActive && styles.active)}
           >
-            {tab.to === '/employees' && <Users size={16} aria-hidden />}
+            {tab.to.startsWith('/employees') && <Users size={16} aria-hidden />}
             {tab.to === '/warehouse' && <Warehouse size={16} aria-hidden />}
             {tab.to === '/products' && <Package size={16} aria-hidden />}
             {tab.label}

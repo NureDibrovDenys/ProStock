@@ -182,6 +182,9 @@ export interface NewUser {
   warehouse_id: number;
 }
 
+/** Дані комірника від менеджера: роль і склад бекенд призначає сам. */
+export type NewStorekeeper = Omit<NewUser, 'role' | 'warehouse_id'>;
+
 // ── Товари ────────────────────────────────────────────────────────────────
 
 export type UnitOfMeasure = 'pcs' | 'kg' | 'pound' | 'box' | 'pallet' | 'other';
@@ -275,6 +278,8 @@ export type Permission =
   | 'products_import'
   | 'products_export'
   | 'users_manage'
+  /** Менеджер складу: створення комірників свого складу. */
+  | 'storekeepers_manage'
   | 'warehouse_map_write';
 
 export interface AuthUser {

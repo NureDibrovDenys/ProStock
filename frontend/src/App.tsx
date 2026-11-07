@@ -40,7 +40,7 @@ export function App() {
           <Route
             path="/employees/new"
             element={
-              <RequirePermission permission="users_manage">
+              <RequirePermission permission={['users_manage', 'storekeepers_manage']}>
                 <NewEmployeePage />
               </RequirePermission>
             }

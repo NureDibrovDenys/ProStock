@@ -31,8 +31,12 @@ PRODUCT_READ_ROLES: frozenset[RoleName] = ALL_ROLES
 # Account management — root and admin
 USER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
+# Creating storekeepers of own warehouse — warehouse manager
+# (admins create any accounts via 'users_manage')
+STOREKEEPER_MANAGE_ROLES: frozenset[RoleName] = frozenset({RoleName.WAREHOUSE_MANAGER})
+
 # Editing map of a warehouse — only admin
-WAREHOUSE_MAP_WRITE_ROLES: frozenset[str] = ADMIN_ROLES
+WAREHOUSE_MAP_WRITE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
 def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
     """
@@ -52,6 +56,7 @@ def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
             "products_import": False,
             "products_export": False,
             "users_manage": False,
+            "storekeepers_manage": False,
             "warehouse_map_write": False,
         }
     
@@ -62,5 +67,6 @@ def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
         "products_import": role_enum in PRODUCT_WRITE_ROLES,
         "products_export": role_enum in PRODUCT_READ_ROLES,
         "users_manage": role_enum in USER_MANAGE_ROLES,
-        "warehouse_map_write": role_enum in PRODUCT_WRITE_ROLES,
+        "storekeepers_manage": role_enum in STOREKEEPER_MANAGE_ROLES,
+        "warehouse_map_write": role_enum in WAREHOUSE_MAP_WRITE_ROLES,
     }
