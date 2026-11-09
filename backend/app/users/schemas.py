@@ -289,6 +289,9 @@ class UserListResponse(BaseModel):
     page_size: int
     pages: int
 
+#призначення або скасування менджера складу 
+class WarehouseAssignmentPayload(BaseModel):
+    warehouse_id: int | None = Field(..., gt=0, description="Warehouse ID. Null removes the warehouse assignment.")
 
 def serialize_user(user) -> UserListItem:
     """ORM User → елемент списку для фронтенду."""
