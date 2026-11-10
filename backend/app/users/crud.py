@@ -294,7 +294,7 @@ async def assign_warehouse(
     if warehouse_id is not None:
         warehouse = await session.get(Warehouse, warehouse_id)
         
-        if warehouse_id is None:
+        if warehouse is None:
             raise WareHouseNotFoundError(warehouse_id)
         
     #оновлення занчення в пам'яті
