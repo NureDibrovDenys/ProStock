@@ -18,7 +18,7 @@ DEFAULT_USERS: tuple[tuple[str, str, str, str, RoleName], ...] = (
     ("Олена", "Ковальчук", "MANAGER_EMAIL", "MANAGER_PASSWORD", RoleName.WAREHOUSE_MANAGER),
     ("Іван", "Петренко", "WORKER_EMAIL", "WORKER_PASSWORD", RoleName.WORKER),
 )
-DEFAULT_WAREHOUSE_ID = 1
+
 
 
 async def ensure_roles(session: AsyncSession) -> dict[RoleName, Role]:
@@ -52,7 +52,7 @@ async def ensure_default_warehouse(session: AsyncSession) -> int:
     return warehouse_id
 
 
-async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role], warehouse_id: int) -> None:
+async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role]) -> None:
     """Створює стартові акаунти, якщо їх ще немає (лише коли SEED_DEFAULT_USERS)."""
     # Імпорт усередині функції, щоб уникнути циклічної залежності
     from app.utils.security import hash_password
@@ -75,7 +75,7 @@ async def ensure_default_users(session: AsyncSession, roles: dict[RoleName, Role
                 last_name=last_name,
                 role_id=roles[role_name].id,
                 status=UserStatus.ACTIVE,
-                warehouse_id=warehouse_id,
+               
             )
         )
         logger.info("Створено стартового користувача %s (%s)", email, role_name.value)
@@ -90,14 +90,9 @@ async def bootstrap(session: AsyncSession) -> None:
     
     # 3. Створюємо користувачів, передаючи їм правильний warehouse_id
     if settings.SEED_DEFAULT_USERS:
-        await ensure_default_users(session, roles, warehouse_id=warehouse_id)
+        await ensure_default_users(session, roles)
 
-    # Захист на випадок, якщо користувачі вже існували раніше без складу
-    await session.execute(
-        update(User)
-        .where(User.warehouse_id.is_(None))
-        .values(warehouse_id=warehouse_id)
-    )
+
     
     await session.commit()
     logger.info("Bootstrap успішно завершено!")
