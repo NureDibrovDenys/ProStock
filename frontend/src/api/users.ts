@@ -17,8 +17,18 @@ export const getUsers = (params: { page?: number; page_size?: number; search?: s
 export const createUser = (data: NewUser) => request<User>('/users', { method: 'POST', body: data });
 
 /** PATCH /api/v1/users/{id} */
-export const updateUser = (userId: number, data: Partial<NewUser> & { status?: UserStatus }) =>
+export const updateUser = (userId: number, data: Partial<Omit<NewUser, 'warehouse_id'>> & { status?: UserStatus }) =>
   request<User>(`/users/${userId}`, { method: 'PATCH', body: data });
+
+/*PUT /api/v1/users/{id}/warehouse — призначення або зняття складу.*/
+export const assignUserWarehouse = (
+  userId: number,
+  warehouseId: number | null,
+)=>
+  request<User>(`/users/${userId}/warehouse`,{
+    method: 'PUT',
+    body: {warehouse_id: warehouseId},
+  })
 
 /** DELETE /api/v1/users/{id} */
 export const deleteUser = (userId: number) => request<void>(`/users/${userId}`, { method: 'DELETE' });

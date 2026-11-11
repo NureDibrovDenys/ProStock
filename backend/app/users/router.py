@@ -191,7 +191,7 @@ async def create_user(
     return _to_item(user)
 
 
-@router.post(
+@router.put(
     "/{user_id}/warehouse",
     response_model=UserListItem,
     summary="Assign a warehouse to a manager",

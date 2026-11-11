@@ -227,7 +227,7 @@ class AuthUserSchema(BaseModel):
     last_name: str
     role: str
     status: str
-    warehouse_id: int
+    warehouse_id: int | None
     permissions: dict[str, bool]
 
 

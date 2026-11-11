@@ -7,17 +7,30 @@ import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
-import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
+import { getWarehouses } from '../api/warehouse';
+import { Select } from '../components/Select';
+
 import styles from './EmployeesPage.module.css';
+import { AssignWarehouseModal } from '../components/AssignWarehouseModal';
+
 
 export function EmployeesPage() {
   const { session, can } = useAuth();
   const queryClient = useQueryClient();
   const [pendingUser, setPendingUser] = useState<User | null>(null);
-  const warehouseId = useCurrentWarehouse();
+  /**стан фіальта та запит складів */
+  const [warehouseFilter, setWarehouseFilter] = useState('');
+  const warehousesQuery = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: getWarehouses,
+  });
+  const warehouses = warehousesQuery.data ?? [];
+
+  const [assignmentUser, setAssignmentUser] = useState<User | null>(null);
+
   const query = useQuery({
-    queryKey: ['users', warehouseId],
-    queryFn: () => getUsers({ warehouse_id: warehouseId, page_size: 100 }),
+    queryKey: ['users', warehouseFilter],
+    queryFn: () => getUsers({ page_size: 100, warehouse_id: warehouseFilter === '' ? undefined : Number(warehouseFilter) }),
   });
   const users = query.data?.items ?? [];
   const active = users.filter((u) => u.status === 'active');
@@ -38,7 +51,34 @@ export function EmployeesPage() {
         subtitle={query.data ? `Усього ${query.data.total} · активних ${active.length}` : undefined}
         actions={<Button to="/employees/new">+ Додати співробітника</Button>}
       />
+      
+      <div className={styles.filters}>
+        <Select
+          label="Фільтр за складом"
+          value={warehouseFilter}
+          onChange={(event) => setWarehouseFilter(event.target.value)}
+          disabled={!warehousesQuery.isSuccess}
+        >
+          <option value="">Усі склади</option>
 
+          {warehouses.map((warehouse) => (
+            <option
+              key={warehouse.warehouse_id}
+              value={String(warehouse.warehouse_id)}>
+              {warehouse.warehouse_name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {warehousesQuery.isPending && (
+        <LoadingState label="Завантаження складів..." />
+      )}
+      {warehousesQuery.isError && (
+        <ErrorState
+          error={warehousesQuery.error}
+          onRetry={() => void warehousesQuery.refetch()}
+        />
+      )}
       {query.isPending && <LoadingState />}
       {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
 
@@ -63,7 +103,7 @@ export function EmployeesPage() {
           <section className={styles.all}>
             <h2 className={styles.allTitle}>Усі співробітники</h2>
             {users.length === 0 ? (
-              <p className={styles.muted}>Співробітників ще немає — додайте першого.</p>
+              <p className={styles.muted}>{warehouseFilter === '' ? 'Співробітників ще немає — додайте першого.' : 'На цьому складі немає співробітників.'}</p>
             ) : (
               <ul className={styles.rows}>
                 {users.map((u) => (
@@ -73,12 +113,27 @@ export function EmployeesPage() {
                     canManageUsers={canManageUsers}
                     isCurrentUser={u.user_id === session?.user.user_id}
                     onToggleStatus={setPendingUser}
+                    onAssignWarehouse={setAssignmentUser}
+                    warehouseName={
+                      u.warehouse_id === null
+                        ? 'Без складу'
+                        : warehouses.find(
+                          (warehouse) => warehouse.warehouse_id === u.warehouse_id,
+                        )?.warehouse_name ?? `Склад №${u.warehouse_id}`
+                    }
                   />
                 ))}
               </ul>
             )}
           </section>
         </div>
+      )}
+      {assignmentUser && (
+        <AssignWarehouseModal
+          key={assignmentUser.user_id}
+          user={assignmentUser}
+          onClose={() => setAssignmentUser(null)}
+        />
       )}
       {pendingUser && (
         <ConfirmDialog
@@ -119,14 +174,18 @@ export function EmployeesPage() {
 
 function EmployeeRow({
   user: u,
+  warehouseName,
   canManageUsers,
   isCurrentUser,
   onToggleStatus,
+  onAssignWarehouse,
 }: {
+  warehouseName: string,
   user: User;
   canManageUsers: boolean;
   isCurrentUser: boolean;
   onToggleStatus: (user: User) => void;
+  onAssignWarehouse: (user: User) => void;
 }) {
   return (
     <li className={styles.row}>
@@ -138,7 +197,19 @@ function EmployeeRow({
         <p className={styles.email}>{u.user_email}</p>
       </div>
       <p className={styles.position}>{u.position ?? ROLE_LABELS[u.role] ?? u.role}</p>
+      <p className={styles.warehouse}>
+        <span className={styles.warehouseLabel}>Склад</span>
+        {warehouseName}
+      </p>
       <UserStatusBadge status={u.status} />
+      {canManageUsers && u.role === 'warehouse_manager' && (
+        <Button
+          variant='secondary'
+          onClick={() => onAssignWarehouse(u)}
+        >
+          Призначити на склад
+        </Button>
+      )}
       {canManageUsers && !isCurrentUser && (
         <Button
           variant="secondary"
