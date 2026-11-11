@@ -325,18 +325,4 @@ class UserListResponse(BaseModel):
 class WarehouseAssignmentPayload(BaseModel):
     warehouse_id: int | None = Field(..., gt=0, description="Warehouse ID. Null removes the warehouse assignment.")
 
-def serialize_user(user) -> UserListItem:
-    """ORM User → елемент списку для фронтенду."""
-    return UserListItem(
-        user_id=user.id,
-        user_email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        role=user.role.name if user.role else RoleName.GUEST,
-        status=user.status,
-        warehouse_id=user.warehouse_id or 1,
-        position=None,
-        on_shift=False,
-        created_at=user.created_at,
-    )
 
