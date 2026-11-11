@@ -24,12 +24,15 @@ from app.users.schemas import (
     UserListItem,
     UserListResponse,
     UserUpdatePayload,
+    WarehouseAssignmentPayload,
 )
 from app.utils.security import (
     get_current_user,
     get_current_admin_user,
     require_roles
 )
+from app import warehouses
+from app.warehouses.services.warehouse_map_service import WarehouseMapNotFound
 
 router: APIRouter = APIRouter(
     prefix="/api/v1/users",
@@ -83,7 +86,7 @@ async def list_users(
         None,
         max_length=100,
         description="Case-insensitive search by name or email",
-        example={
+        examples={
             "default": {
                 "summary": "Search by part of a name",
                 "value": "Alex"
@@ -98,6 +101,11 @@ async def list_users(
         None,
         alias="status",
         description="Filter by a user status"
+    ),
+    warehouse_id: int | None = Query(
+        None,
+        gt=0,
+        description="Filter users by Warehouse ID"
     ),
     page: int = Query(
         1,
@@ -120,6 +128,7 @@ async def list_users(
         user_status=user_status,
         page=page,
         page_size=page_size,
+        warehouse_id=warehouse_id
     )
     return UserListResponse(
         items=[_to_item(user) for user in users],
@@ -179,6 +188,73 @@ async def create_user(
             detail="The specified role does not exists",
         ) from e
 
+    return _to_item(user)
+
+
+@router.post(
+    "/{user_id}/warehouse",
+    response_model=UserListItem,
+    summary="Assign a warehouse to a manager",
+    description=("Available only to admins. "
+                 "Assigns a warehouse to a warehouse manager. "
+                 "Passing null removes the warehouse assignment."),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Warehouse assignment successfully updated"
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "description": "User or warehouse not found"
+        },
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": "The specified user is not a warehouse manager"
+        },
+    } | COMMON_RESPONSES,
+)
+async def assign_manager_warehouse(
+    user_id: int = Path(
+        ...,
+        gt=0,
+        description="Warehouse manager user ID",
+    ),
+    payload: WarehouseAssignmentPayload = ...,
+    _: dict = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> UserListItem:
+    try:
+        user: User = await crud.assign_warehouse(
+            session,
+            user_id=user_id,
+            warehouse_id=payload.warehouse_id
+        )
+        # користувача не знайдено
+    except crud.UserNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="A user with this ID not found"
+        )from e
+
+        # невідповідність ролі
+    except crud.UserIsNotManagerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The specified user is not a warehouse manager"
+        )from e
+
+        # склад не знайдено
+    except crud.WareHouseNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="A warehouse with this ID not found"
+        )from e
+
+        # помилка запису в БД
+    except crud.FailedToUpdateUserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update warehouse assignment"
+        )from e
+
+        # формування успшіної відповіді
     return _to_item(user)
 
 
@@ -261,19 +337,19 @@ async def update_user(
         RoleName.ADMIN.value
     }
     is_self: bool = current_user["id"] == user_id
-    
+
     if not is_admin and not is_self:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to edit another user's profile"
         )
-    
+
     if not is_admin and payload.role is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to change user roles"
         )
-    
+
     user: User | None = await crud.get_user(session, user_id)
     if user is None:
         raise HTTPException(
@@ -300,7 +376,7 @@ async def update_user(
             RoleName.ADMIN
         }
     )
-    
+
     if removes_admin_rights and is_currently_admin:
         remaining_admins: int = await crud.count_active_admins(
             session,
@@ -311,13 +387,13 @@ async def update_user(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="The last active admin cannot be stripped of their rights",
             )
-    
+
     is_self_deactivate: bool = (
         user.id == current_user["id"]
         and payload.status is not None
         and payload.status != UserStatus.ACTIVE
     )
-    
+
     if is_self_deactivate:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -431,5 +507,5 @@ async def delete_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Server error when deleting a user",
         ) from e
-    
+
     return None

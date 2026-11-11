@@ -14,6 +14,8 @@ from app.utils.security import hash_password
 
 from pydantic import EmailStr
 
+from app.warehouses.models import Warehouse
+
 
 class EmailAlreadyExistsError(Exception):
     """The email is already taken by another user."""
@@ -43,6 +45,13 @@ class UserNotFoundError(Exception):
     """The user does not exist."""
     pass
 
+class WareHouseNotFoundError(Exception):
+    """Warehouse does not exist"""
+    pass
+
+class UserIsNotManagerError(Exception):
+    """User is not a warehouse manager"""
+    pass
 
 async def get_role_by_name(
     session: AsyncSession,
@@ -141,6 +150,9 @@ async def list_users(
     
     if user_status is not None:
         conditions.append(User.status == user_status)
+        
+    if warehouse_id is not None:
+        conditions.append(User.warehouse_id == warehouse_id)
     
     count_stmt = (
         select(func.count(User.id))
@@ -158,6 +170,8 @@ async def list_users(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
+    
+   
     
     rows_result = await session.scalars(users_stmt)
     rows = rows_result.all()
@@ -268,6 +282,41 @@ async def update_user(
         raise FailedToUpdateUserError from e
     
     await session.refresh(user)
+    return user
+
+#функція для прив'язки складу до менджера складу або зняття 
+async def assign_warehouse(
+    session: AsyncSession,
+    user_id: int,
+    warehouse_id: int | None,
+) -> User:
+    #перевірка існування користувача
+    user: User | None = await get_user(session, user_id)
+    if user is None:
+        raise UserNotFoundError(user_id)
+    
+    #перевірка ролі користувача
+    if user.role is None or user.role.name != RoleName.WAREHOUSE_MANAGER:
+        raise UserIsNotManagerError(user_id)
+    
+    #перевірка існування складу
+    if warehouse_id is not None:
+        warehouse = await session.get(Warehouse, warehouse_id)
+        
+        if warehouse is None:
+            raise WareHouseNotFoundError(warehouse_id)
+        
+    #оновлення занчення в пам'яті
+    user.warehouse_id = warehouse_id
+    
+    try:
+        await session.commit()
+    except SQLAlchemyError as e:
+        await session.rollback() 
+        raise FailedToUpdateUserError from e
+    
+    await session.refresh(user)
+    
     return user
 
 

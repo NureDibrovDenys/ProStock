@@ -56,3 +56,8 @@ class SupplierStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     BLOCKED = "blocked"
+
+class RecipientStatus(str, Enum):
+    ACTIVE = "active" # Дозвіл на співпрацю
+    INACTIVE = "inactive" # Архівування (видалення)
+    BLOCKED = "blocked" # Заборона співпраці

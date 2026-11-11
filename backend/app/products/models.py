@@ -18,7 +18,7 @@ from sqlalchemy.orm import (
     validates
 )
 
-from app.core.enums import UnitOfMeasure, SupplierStatus
+from app.core.enums import UnitOfMeasure, SupplierStatus, RecipientStatus
 from app.core.db import Base
 from app.core.validators import validate_positive_decimal, validate_non_negative_decimal
 
@@ -205,6 +205,61 @@ class Supplier(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         "supplier_created_at",
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+
+class Recipient(Base):
+    __tablename__ = 'recipient'
+
+    id: Mapped[int] = mapped_column(
+        "recipient_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True
+    )
+    company_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False
+    )
+    # Філії однієї мережі можуть мати спільний ЄДРПОУ, тому унікальних обмежень немає
+    tax_id: Mapped[str | None] = mapped_column( 
+        String(20),
+        nullable=True
+    )
+    contact_person: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True
+    )
+    phone_number: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True
+    )
+    email: Mapped[str | None] = mapped_column(
+        "recipient_email",
+        String(100),
+        nullable=True
+    )
+    # Адреса доставки обов'язкова, бо без неї нікуди відвантажувати
+    address: Mapped[str] = mapped_column(
+        "delivery_address",
+        Text,
+        nullable=False
+    )
+    status: Mapped[RecipientStatus] = mapped_column(
+        "recipient_status",
+        Enum(
+            RecipientStatus,
+            name="recipient_status",
+            native_enum=False
+        ),
+        nullable=False,
+        default=RecipientStatus.ACTIVE,
+        server_default=RecipientStatus.ACTIVE.name,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "recipient_created_at",
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False
