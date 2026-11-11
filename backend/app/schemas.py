@@ -227,6 +227,7 @@ class AuthUserSchema(BaseModel):
     last_name: str
     role: str
     status: str
+    # null — користувач не прив'язаний до складу (адміністратор або ще не призначений менеджер)
     warehouse_id: int | None
     permissions: dict[str, bool]
 

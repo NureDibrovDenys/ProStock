@@ -7,11 +7,19 @@ import type { Permission } from '../api/types';
 /**
  * Обмежує доступ до сторінки за правом ролі.
  * Ховає навігацію окремо (NavBar), а тут — захищає прямий перехід за URL.
+ * Якщо передано кілька прав, достатньо будь-якого з них.
  */
-export function RequirePermission({ permission, children }: { permission: Permission; children: ReactNode }) {
+export function RequirePermission({
+  permission,
+  children,
+}: {
+  permission: Permission | Permission[];
+  children: ReactNode;
+}) {
   const { can } = useAuth();
+  const allowed = (Array.isArray(permission) ? permission : [permission]).some(can);
 
-  if (!can(permission)) {
+  if (!allowed) {
     return (
       <div
         style={{
