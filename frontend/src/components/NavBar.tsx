@@ -1,4 +1,4 @@
-import { LogOut, Package, Users, Warehouse } from 'lucide-react';
+import { BookOpen, LogOut, Package, Users, Warehouse } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { Permission } from '../api/types';
 import { ROLE_LABELS } from '../api/users';
@@ -14,6 +14,7 @@ const TABS: Tab[] = [
   // Адміністратор бачить усіх співробітників, менеджер складу — комірників свого складу
   { to: '/employees', label: 'Співробітники', end: false, permission: ['users_manage', 'storekeepers_manage'] },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
+  { to: '/directories', label: 'Довідники', end: false, permission: ['directories_manage'] },
 ];
 
 export function NavBar() {
@@ -45,6 +46,7 @@ export function NavBar() {
             {tab.to === '/employees' && <Users size={16} aria-hidden />}
             {tab.to === '/warehouse' && <Warehouse size={16} aria-hidden />}
             {tab.to === '/products' && <Package size={16} aria-hidden />}
+            {tab.to === '/directories' && <BookOpen size={16} aria-hidden />}
             {tab.label}
           </NavLink>
         ))}

@@ -269,6 +269,27 @@ export interface ImportReport {
   errors: ImportRowError[];
 }
 
+// ── Довідники: постачальники та одержувачі ────────────────────────────────
+
+export type CounterpartyKind = 'suppliers' | 'recipients';
+export type CounterpartyStatus = 'active' | 'inactive' | 'blocked';
+
+/** Постачальник або одержувач — поля спільні (моделі Supplier і Recipient). */
+export interface Counterparty {
+  id: number;
+  company_name: string;
+  /** ЄДРПОУ (8 цифр) або ІПН (10 цифр). */
+  tax_id: string | null;
+  contact_person: string | null;
+  phone_number: string | null;
+  email: string | null;
+  /** Для одержувача — адреса доставки (обов'язкова). */
+  address: string | null;
+  status: CounterpartyStatus;
+}
+
+export type CounterpartyInput = Omit<Counterparty, 'id' | 'status'>;
+
 // ── Авторизація ───────────────────────────────────────────────────────────
 
 export type Permission =
@@ -280,7 +301,9 @@ export type Permission =
   | 'users_manage'
   /** Менеджер складу: створення комірників свого складу. */
   | 'storekeepers_manage'
-  | 'warehouse_map_write';
+  | 'warehouse_map_write'
+  /** Адміністратор і менеджер складу: довідники постачальників та одержувачів. */
+  | 'directories_manage';
 
 export interface AuthUser {
   user_id: number;
