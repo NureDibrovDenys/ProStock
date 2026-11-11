@@ -31,6 +31,9 @@ PRODUCT_READ_ROLES: frozenset[RoleName] = ALL_ROLES
 # Account management — root and admin
 USER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
+# Directories of suppliers and recipients — managers maintain them
+COUNTERPARTY_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+
 # Editing map of a warehouse — only admin
 WAREHOUSE_MAP_WRITE_ROLES: frozenset[str] = ADMIN_ROLES
 
