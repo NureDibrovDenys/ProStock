@@ -92,7 +92,7 @@ class InboundOrder(Base):
             "supplier_id",
             "invoice_number",
             name="unique_supplier_invoice_number",
-        )
+        ),
     )
     
     def __repr__(self) -> str:
