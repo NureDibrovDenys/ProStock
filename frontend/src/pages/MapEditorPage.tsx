@@ -11,6 +11,7 @@ import { getWarehouseMap, saveWarehouseMap } from '../api/warehouse';
 import { MapLayers } from '../components/map/MapLayers';
 import { ZoomControls } from '../components/map/ZoomControls';
 import mapStyles from '../components/map/map.module.css';
+import { NoWarehouseState } from '../components/NoWarehouseState';
 import {
   FINE_STEP,
   angleToEdge,
@@ -106,12 +107,20 @@ export function MapEditorPage() {
   const warehouseId = useCurrentWarehouse();
   const query = useQuery({
     queryKey: ['map', warehouseId],
-    queryFn: () => getWarehouseMap(warehouseId),
-    // Редагуємо знімок мапи — фонове оновлення не повинно перезатирати зміни
+    enabled: warehouseId !== null,
+    queryFn: () => {
+      if (warehouseId === null) {
+        throw new Error('Склад не призначено');
+      }
+
+      return getWarehouseMap(warehouseId);
+    },
     refetchOnWindowFocus: false,
     retry: false,
   });
-
+  if(warehouseId === null){
+    return <NoWarehouseState/>;
+  }
   if (query.isPending) {
     return (
       <div className={styles.loading}>
@@ -1136,21 +1145,21 @@ function Editor({
                 tool === 'partition' ||
                 vertexDrag.current !== null ||
                 partDrag.current !== null) && (
-                <g pointerEvents="none">
-                  {alignGuides(cur).map(([a, b], i) => (
-                    <line
-                      key={i}
-                      x1={a[0]}
-                      y1={a[1]}
-                      x2={b[0]}
-                      y2={b[1]}
-                      stroke="var(--map-acc)"
-                      strokeWidth={sw(1)}
-                      strokeDasharray={`${sw(5)} ${sw(4)}`}
-                    />
-                  ))}
-                </g>
-              )}
+                  <g pointerEvents="none">
+                    {alignGuides(cur).map(([a, b], i) => (
+                      <line
+                        key={i}
+                        x1={a[0]}
+                        y1={a[1]}
+                        x2={b[0]}
+                        y2={b[1]}
+                        stroke="var(--map-acc)"
+                        strokeWidth={sw(1)}
+                        strokeDasharray={`${sw(5)} ${sw(4)}`}
+                      />
+                    ))}
+                  </g>
+                )}
               {poly.length > 0 && (
                 <g pointerEvents="none">
                   <polyline

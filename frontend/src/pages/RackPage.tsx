@@ -7,6 +7,7 @@ import { StatCard, StatGrid } from '../components/StatCard';
 import { ErrorState, LoadingState, PageHeader, ProgressBar } from '../components/ui';
 import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { formatRelativeDay, plural } from '../lib/format';
+import { NoWarehouseState } from '../components/NoWarehouseState';
 import styles from './RackPage.module.css';
 
 const SHELF_STATUS_LABELS: Record<ShelfStatus, string> = {
@@ -21,7 +22,14 @@ export function RackPage() {
 
   const query = useQuery({
     queryKey: ['rack', warehouseId, rackCode],
-    queryFn: () => getRackDetails(warehouseId, rackCode),
+    enabled: warehouseId !== null,
+    queryFn: () => {
+      if (warehouseId === null) {
+        throw new Error('Склад не призначено');
+      }
+
+      return getRackDetails(warehouseId, rackCode);
+    },
   });
   const rack = query.data;
 
@@ -30,6 +38,9 @@ export function RackPage() {
   const free = capacity - occupied;
   const fill = capacity ? Math.round((occupied / capacity) * 100) : 0;
 
+  if(warehouseId === null){
+    return <NoWarehouseState/>
+  }
   return (
     <>
       <div className={styles.back}>
@@ -43,12 +54,12 @@ export function RackPage() {
         subtitle={
           rack
             ? [
-                rack.zone_name,
-                `${rack.shelves.length} ${plural(rack.shelves.length, ['полиця', 'полиці', 'полиць'])}`,
-                `оновлено ${formatRelativeDay(rack.updated_at)}`,
-              ]
-                .filter(Boolean)
-                .join(' · ')
+              rack.zone_name,
+              `${rack.shelves.length} ${plural(rack.shelves.length, ['полиця', 'полиці', 'полиць'])}`,
+              `оновлено ${formatRelativeDay(rack.updated_at)}`,
+            ]
+              .filter(Boolean)
+              .join(' · ')
             : undefined
         }
       />
