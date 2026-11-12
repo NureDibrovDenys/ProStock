@@ -10,7 +10,7 @@ import { getWarehouses } from '../api/warehouse';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
-import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
+
 import { validateEmail, validateNewPassword } from '../lib/validation';
 import styles from './NewEmployeePage.module.css';
 
@@ -20,7 +20,7 @@ type FormState = {
   user_email: string;
   password: string;
   role: RoleName;
-  warehouse_id: number;
+  warehouse_id: number | null;
 };
 
 type Errors = Partial<Record<keyof FormState, string>>;
@@ -44,7 +44,6 @@ function validate(form: FormState): Errors {
 export function NewEmployeePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const defaultWarehouseId = useCurrentWarehouse();
   const warehousesQuery = useQuery({
     queryKey: ['warehouses'],
     queryFn: getWarehouses,
@@ -55,7 +54,7 @@ export function NewEmployeePage() {
     user_email: '',
     password: '',
     role: 'storekeeper',
-    warehouse_id: defaultWarehouseId,
+    warehouse_id: null,
   });
   const [errors, setErrors] = useState<Errors>({});
 
@@ -162,20 +161,33 @@ export function NewEmployeePage() {
 
         <Select
           label="Склад *"
-          value={String(form.warehouse_id)}
-          onChange={(event) =>
-            setForm((prev) => ({ ...prev, warehouse_id: Number(event.target.value) }))
-          }
+          value={form.warehouse_id === null ? '' : String(form.warehouse_id)}
+          onChange={(event) => {
+            const value = event.target.value;
+            setForm((prev) => ({ ...prev, warehouse_id: value === '' ? null: Number(value) }));
+            mutation.reset();
+          }}
           disabled={warehousesQuery.isPending || warehousesQuery.isError}
         >
+        <option value="">Без складу</option>
+
           {warehousesQuery.data?.map((warehouse) => (
             <option key={warehouse.warehouse_id} value={warehouse.warehouse_id}>
               {warehouse.warehouse_name}
             </option>
           ))}
-          {!warehousesQuery.data?.length && <option value={defaultWarehouseId}>Склад №{defaultWarehouseId}</option>}
+          
         </Select>
 
+        {warehousesQuery.isError && (
+            <p className= {styles.error} role='alert'>
+              Не вдалося завантажити список складів. {' '}
+              <Button variant='secondary'
+              onClick={() => void warehousesQuery.refetch}>
+                Спробувати ще раз
+              </Button>
+            </p>
+        )}
         <div className={styles.roleHint}>
           {form.role === 'administrator' && 'Повний доступ: товари, користувачі, імпорт та експорт.'}
           {form.role === 'warehouse_manager' && 'Товари й імпорт, перегляд співробітників без керування.'}

@@ -179,7 +179,7 @@ export interface NewUser {
   user_email: string;
   password: string;
   role: RoleName;
-  warehouse_id: number;
+  warehouse_id: number | null;
 }
 
 // ── Товари ────────────────────────────────────────────────────────────────
