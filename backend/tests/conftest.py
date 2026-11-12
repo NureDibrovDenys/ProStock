@@ -12,7 +12,10 @@ os.environ["LOGIN_MAX_ATTEMPTS"] = "100"
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.core.bootstrap import bootstrap
+from sqlalchemy import update
+
+from app.core.bootstrap import bootstrap, ensure_default_warehouse
+from app.users.models import User
 from app.core.db import Base, async_session_maker, engine
 from app.main import app
 
@@ -28,6 +31,15 @@ async def prepared_database():
 
     async with async_session_maker() as session:
         await bootstrap(session)
+        # Bootstrap не призначає склади: як і в житті, адміністратор прив'язує персонал до складу
+        warehouse_id = await ensure_default_warehouse(session)
+        await session.execute(
+            update(User)
+            .where(User.email.in_([os.environ.get("MANAGER_EMAIL", "manager@prostock.com"),
+                                   os.environ.get("WORKER_EMAIL", "worker@prostock.com")]))
+            .values(warehouse_id=warehouse_id)
+        )
+        await session.commit()
 
     yield
 

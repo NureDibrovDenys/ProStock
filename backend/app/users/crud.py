@@ -124,9 +124,12 @@ async def list_users(
     page_size: int = 20,
 ) -> tuple[list[User], int]:
     """Returns a page of users and the total number of users."""
-    
+
     conditions: list = []
-    
+
+    if warehouse_id is not None:
+        conditions.append(User.warehouse_id == warehouse_id)
+
     if search and search.strip():
         pattern: str = f"%{search.strip()}%"
         conditions.append(

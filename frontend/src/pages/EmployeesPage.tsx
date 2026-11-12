@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError } from '../api/client';
 import type { User, UserStatus } from '../api/types';
-import { ROLE_LABELS, getUsers, updateUser } from '../api/users';
+import { ROLE_LABELS, getStorekeepers, getUsers, updateUser } from '../api/users';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
@@ -18,19 +18,26 @@ export function EmployeesPage() {
   const { session, can } = useAuth();
   const queryClient = useQueryClient();
   const [pendingUser, setPendingUser] = useState<User | null>(null);
-  /**стан фіальта та запит складів */
+  // Менеджер складу бачить і редагує лише комірників свого складу
+  const isManagerMode = !can('users_manage') && can('storekeepers_manage');
+
+  /**стан фільтра та запит складів (список складів доступний лише адміністратору) */
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const warehousesQuery = useQuery({
     queryKey: ['warehouses'],
     queryFn: getWarehouses,
+    enabled: !isManagerMode,
   });
   const warehouses = warehousesQuery.data ?? [];
 
   const [assignmentUser, setAssignmentUser] = useState<User | null>(null);
 
   const query = useQuery({
-    queryKey: ['users', warehouseFilter],
-    queryFn: () => getUsers({ page_size: 100, warehouse_id: warehouseFilter === '' ? undefined : Number(warehouseFilter) }),
+    queryKey: ['users', isManagerMode ? 'storekeepers' : warehouseFilter],
+    queryFn: () =>
+      isManagerMode
+        ? getStorekeepers({ page_size: 100 })
+        : getUsers({ page_size: 100, warehouse_id: warehouseFilter === '' ? undefined : Number(warehouseFilter) }),
   });
   const users = query.data?.items ?? [];
   const active = users.filter((u) => u.status === 'active');
@@ -47,33 +54,35 @@ export function EmployeesPage() {
   return (
     <>
       <PageHeader
-        title="Співробітники"
+        title={isManagerMode ? 'Комірники складу' : 'Співробітники'}
         subtitle={query.data ? `Усього ${query.data.total} · активних ${active.length}` : undefined}
-        actions={<Button to="/employees/new">+ Додати співробітника</Button>}
+        actions={<Button to="/employees/new">{isManagerMode ? '+ Додати комірника' : '+ Додати співробітника'}</Button>}
       />
       
-      <div className={styles.filters}>
-        <Select
-          label="Фільтр за складом"
-          value={warehouseFilter}
-          onChange={(event) => setWarehouseFilter(event.target.value)}
-          disabled={!warehousesQuery.isSuccess}
-        >
-          <option value="">Усі склади</option>
+      {!isManagerMode && (
+        <div className={styles.filters}>
+          <Select
+            label="Фільтр за складом"
+            value={warehouseFilter}
+            onChange={(event) => setWarehouseFilter(event.target.value)}
+            disabled={!warehousesQuery.isSuccess}
+          >
+            <option value="">Усі склади</option>
 
-          {warehouses.map((warehouse) => (
-            <option
-              key={warehouse.warehouse_id}
-              value={String(warehouse.warehouse_id)}>
-              {warehouse.warehouse_name}
-            </option>
-          ))}
-        </Select>
-      </div>
-      {warehousesQuery.isPending && (
+            {warehouses.map((warehouse) => (
+              <option
+                key={warehouse.warehouse_id}
+                value={String(warehouse.warehouse_id)}>
+                {warehouse.warehouse_name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+      {!isManagerMode && warehousesQuery.isPending && (
         <LoadingState label="Завантаження складів..." />
       )}
-      {warehousesQuery.isError && (
+      {!isManagerMode && warehousesQuery.isError && (
         <ErrorState
           error={warehousesQuery.error}
           onRetry={() => void warehousesQuery.refetch()}
@@ -111,6 +120,7 @@ export function EmployeesPage() {
                     key={u.user_id}
                     user={u}
                     canManageUsers={canManageUsers}
+                    canEdit={isManagerMode}
                     isCurrentUser={u.user_id === session?.user.user_id}
                     onToggleStatus={setPendingUser}
                     onAssignWarehouse={setAssignmentUser}
@@ -176,6 +186,7 @@ function EmployeeRow({
   user: u,
   warehouseName,
   canManageUsers,
+  canEdit,
   isCurrentUser,
   onToggleStatus,
   onAssignWarehouse,
@@ -183,6 +194,7 @@ function EmployeeRow({
   warehouseName: string,
   user: User;
   canManageUsers: boolean;
+  canEdit: boolean;
   isCurrentUser: boolean;
   onToggleStatus: (user: User) => void;
   onAssignWarehouse: (user: User) => void;
@@ -202,6 +214,11 @@ function EmployeeRow({
         {warehouseName}
       </p>
       <UserStatusBadge status={u.status} />
+      {canEdit && (
+        <Button variant="secondary" className={styles.statusAction} to={`/employees/${u.user_id}/edit`}>
+          Редагувати
+        </Button>
+      )}
       {canManageUsers && u.role === 'warehouse_manager' && (
         <Button
           variant='secondary'
