@@ -11,13 +11,9 @@ import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
-<<<<<<< HEAD
-
-=======
 import { ErrorState, LoadingState } from '../components/ui';
 import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useWarehouseName } from '../hooks/useWarehouse';
->>>>>>> 8e5e6f6147a42763f342a38fc03757ec0bd548cd
 import { validateEmail, validateNewPassword } from '../lib/validation';
 import styles from './NewEmployeePage.module.css';
 
@@ -69,7 +65,7 @@ function fieldErrorsFrom(error: ApiError): Errors {
   return errors;
 }
 
-const emptyForm = (warehouseId: number): FormState => ({
+const emptyForm = (warehouseId: number | null): FormState => ({
   first_name: '',
   last_name: '',
   user_email: '',
@@ -88,38 +84,24 @@ const emptyForm = (warehouseId: number): FormState => ({
 export function NewEmployeePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-<<<<<<< HEAD
-=======
   const { can, session } = useAuth();
   const { userId } = useParams();
   const editId = userId ? Number(userId) : null;
   const isEdit = editId !== null;
   const isManagerMode = isEdit || (!can('users_manage') && can('storekeepers_manage'));
-  // useCurrentWarehouse() підставляє склад №1 для профілів без складу — для менеджера це хибна підказка,
+  // Менеджер без призначеного складу не може керувати комірниками.
   // тому відсутність складу перевіряємо напряму за профілем.
   const managerWithoutWarehouse = isManagerMode && session?.user.warehouse_id == null;
 
   const defaultWarehouseId = useCurrentWarehouse();
   const ownWarehouseName = useWarehouseName();
->>>>>>> 8e5e6f6147a42763f342a38fc03757ec0bd548cd
   const warehousesQuery = useQuery({
     queryKey: ['warehouses'],
     queryFn: getWarehouses,
     enabled: !isManagerMode,
   });
-<<<<<<< HEAD
-  const [form, setForm] = useState<FormState>({
-    first_name: '',
-    last_name: '',
-    user_email: '',
-    password: '',
-    role: 'storekeeper',
-    warehouse_id: null,
-  });
-=======
 
-  const [form, setForm] = useState<FormState>(() => emptyForm(defaultWarehouseId));
->>>>>>> 8e5e6f6147a42763f342a38fc03757ec0bd548cd
+  const [form, setForm] = useState<FormState>(() => emptyForm(isManagerMode ? defaultWarehouseId : null));
   const [errors, setErrors] = useState<Errors>({});
 
   const storekeeperQuery = useQuery({
@@ -328,58 +310,40 @@ export function NewEmployeePage() {
           />
         ) : (
           <Select
-            label="Склад *"
-            value={String(form.warehouse_id)}
-            onChange={(event) => setForm((prev) => ({ ...prev, warehouse_id: Number(event.target.value) }))}
+            label="Склад"
+            value={form.warehouse_id === null ? '' : String(form.warehouse_id)}
+            onChange={(event) => {
+              const value = event.target.value;
+
+              setForm((prev) => ({
+                ...prev,
+                warehouse_id: value === '' ? null : Number(value),
+              }));
+
+              setErrors((prev) => ({
+                ...prev,
+                warehouse_id: undefined,
+              }));
+
+              mutation.reset();
+            }}
             disabled={warehousesQuery.isPending || warehousesQuery.isError}
+            error={errors.warehouse_id}
           >
+            <option value="">Без складу</option>
+
             {warehousesQuery.data?.map((warehouse) => (
-              <option key={warehouse.warehouse_id} value={warehouse.warehouse_id}>
+              <option
+                key={warehouse.warehouse_id}
+                value={String(warehouse.warehouse_id)}
+              >
                 {warehouse.warehouse_name}
               </option>
             ))}
-            {!warehousesQuery.data?.length && <option value={defaultWarehouseId}>Склад №{defaultWarehouseId}</option>}
           </Select>
         )}
 
-<<<<<<< HEAD
-        <Select
-          label="Склад *"
-          value={form.warehouse_id === null ? '' : String(form.warehouse_id)}
-          onChange={(event) => {
-            const value = event.target.value;
-            setForm((prev) => ({ ...prev, warehouse_id: value === '' ? null: Number(value) }));
-            mutation.reset();
-          }}
-          disabled={warehousesQuery.isPending || warehousesQuery.isError}
-        >
-        <option value="">Без складу</option>
-
-          {warehousesQuery.data?.map((warehouse) => (
-            <option key={warehouse.warehouse_id} value={warehouse.warehouse_id}>
-              {warehouse.warehouse_name}
-            </option>
-          ))}
-          
-        </Select>
-
-        {warehousesQuery.isError && (
-            <p className= {styles.error} role='alert'>
-              Не вдалося завантажити список складів. {' '}
-              <Button variant='secondary'
-              onClick={() => void warehousesQuery.refetch}>
-                Спробувати ще раз
-              </Button>
-            </p>
-        )}
-        <div className={styles.roleHint}>
-          {form.role === 'administrator' && 'Повний доступ: товари, користувачі, імпорт та експорт.'}
-          {form.role === 'warehouse_manager' && 'Товари й імпорт, перегляд співробітників без керування.'}
-          {form.role === 'storekeeper' && 'Перегляд каталогу та експорт; змінювати товари не може.'}
-        </div>
-=======
         <div className={styles.roleHint}>{ROLE_HINTS[role]}</div>
->>>>>>> 8e5e6f6147a42763f342a38fc03757ec0bd548cd
 
         {serverError && (
           <p className={styles.error} role="alert">
