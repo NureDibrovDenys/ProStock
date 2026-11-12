@@ -8,6 +8,7 @@ from pydantic import (
     EmailStr,
     Field,
     field_validator,
+    model_validator,
 )
 
 from app.core.enums import RoleName, UserStatus
@@ -203,6 +204,17 @@ class UserCreatePayload(BaseModel):
     @classmethod
     def validate_password(cls, value: str) -> str:
         return validate_password_strength(value)
+
+    @model_validator(mode="after")
+    def validate_storekeeper_warehouse(self) -> "UserCreatePayload":
+        """A storekeeper always works at a concrete warehouse — the one of their
+        manager. Creating one without a warehouse would leave the account
+        without any scope, so it is rejected upfront instead of at the DB level."""
+        if self.role == RoleName.WORKER and self.warehouse_id is None:
+            raise ValueError(
+                "warehouse_id is required for the storekeeper role"
+            )
+        return self
 
 
 class StorekeeperCreatePayload(BaseModel):

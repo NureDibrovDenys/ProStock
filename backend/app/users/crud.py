@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from types import EllipsisType
+
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
@@ -52,6 +54,81 @@ class WareHouseNotFoundError(Exception):
 class UserIsNotManagerError(Exception):
     """User is not a warehouse manager"""
     pass
+
+class WarehouseRequiredForStorekeeperError(Exception):
+    """A storekeeper cannot be created or left without a warehouse."""
+    pass
+
+class ManagerHasStorekeepersError(Exception):
+    """The manager's warehouse cannot be changed: storekeepers would be orphaned."""
+    pass
+
+# PostgreSQL SQLSTATE codes we need to tell constraint violations apart
+UNIQUE_VIOLATION: str = "23505"
+
+
+def _pg_code(exc: SQLAlchemyError) -> str | None:
+    """SQLSTATE of the underlying driver error (asyncpg / psycopg2)."""
+    original = getattr(exc, "orig", None)
+    return getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+
+
+async def _ensure_warehouse_exists(
+    session: AsyncSession,
+    warehouse_id: int | None,
+) -> None:
+    """Guards against a dangling warehouse_id: without it the FK violation
+    surfaces as an opaque IntegrityError and is reported as a wrong field."""
+    if warehouse_id is None:
+        return
+
+    warehouse_exists = await session.scalar(
+        select(Warehouse.id).where(Warehouse.id == warehouse_id)
+    )
+    if warehouse_exists is None:
+        raise WareHouseNotFoundError(warehouse_id)
+
+
+async def count_storekeepers(
+    session: AsyncSession,
+    warehouse_id: int,
+) -> int:
+    """Number of storekeepers assigned to a warehouse."""
+    stmt = (
+        select(func.count(User.id))
+        .select_from(User)
+        .join(User.role)
+        .where(
+            Role.name == RoleName.WORKER,
+            User.warehouse_id == warehouse_id,
+        )
+    )
+    return await session.scalar(stmt) or 0
+
+
+async def count_active_managers(
+    session: AsyncSession,
+    warehouse_id: int,
+    exclude_user_id: int | None = None,
+) -> int:
+    """Number of active warehouse managers responsible for a warehouse."""
+    conditions = [
+        Role.name == RoleName.WAREHOUSE_MANAGER,
+        User.status == UserStatus.ACTIVE,
+        User.warehouse_id == warehouse_id,
+    ]
+
+    if exclude_user_id is not None:
+        conditions.append(User.id != exclude_user_id)
+
+    stmt = (
+        select(func.count(User.id))
+        .select_from(User)
+        .join(User.role)
+        .where(*conditions)
+    )
+    return await session.scalar(stmt) or 0
+
 
 async def get_role_by_name(
     session: AsyncSession,
@@ -151,8 +228,6 @@ async def list_users(
     if user_status is not None:
         conditions.append(User.status == user_status)
         
-    if warehouse_id is not None:
-        conditions.append(User.warehouse_id == warehouse_id)
     
     count_stmt = (
         select(func.count(User.id))
@@ -201,6 +276,12 @@ async def create_user(
     if role is None:
         raise RoleNotFoundError(role_name.value)
 
+    await _ensure_warehouse_exists(session, warehouse_id)
+    if role_name == RoleName.WORKER and warehouse_id is None:
+        raise WarehouseRequiredForStorekeeperError(
+            "A storekeeper must be assigned to a warehouse"
+        )
+
     user: User = User(
         email=user_email,
         password_hash=hash_password(password),
@@ -215,7 +296,11 @@ async def create_user(
         await session.commit()
     except IntegrityError as e:
         await session.rollback()
-        raise EmailAlreadyExistsError(user_email) from e
+        # Only a unique violation means "email is taken"; anything else
+        # (e.g. a concurrent warehouse deletion) must not be reported as such
+        if _pg_code(e) == UNIQUE_VIOLATION:
+            raise EmailAlreadyExistsError(user_email) from e
+        raise FailedToCreateUserError from e
     except SQLAlchemyError as e:
         await session.rollback()
         raise FailedToCreateUserError from e
@@ -234,7 +319,14 @@ async def update_user(
     last_name: str | None = None,
     role_name: RoleName | None = None,
     user_status: UserStatus | None = None,
+    warehouse_id: int | None | EllipsisType = ...,
 ) -> User:
+    """
+    Updates a user.
+
+    ``warehouse_id`` uses ``...`` as a sentinel: ``None`` explicitly detaches
+    the warehouse, ``...`` (the field was absent from the request) keeps it.
+    """
     is_email_changed: bool = (
         user_email is not None and user_email != user.email
     )
@@ -264,17 +356,38 @@ async def update_user(
         role_name is not None and
         (user.role is None or user.role.name != role_name)
     )
+    # Role the user will have after this update — needed for the warehouse check
+    resulting_role: RoleName | None = (
+        role_name if is_role_changed
+        else (user.role.name if user.role is not None else None)
+    )
     if is_role_changed:
         role: Role | None = await get_role_by_name(session, role_name)
         if role is None:
             raise RoleNotFoundError(role_name.value)
         user.role_id = role.id
 
+    is_warehouse_changed: bool = warehouse_id is not ...
+    if is_warehouse_changed:
+        await _ensure_warehouse_exists(session, warehouse_id)
+        user.warehouse_id = warehouse_id
+
+    # The invariant is checked only when this very request could break it,
+    # so legacy storekeepers without a warehouse can still be renamed
+    if (
+        (is_warehouse_changed or is_role_changed)
+        and resulting_role == RoleName.WORKER
+        and user.warehouse_id is None
+    ):
+        raise WarehouseRequiredForStorekeeperError(
+            "A storekeeper must be assigned to a warehouse"
+        )
+
     try:
         await session.commit()
     except IntegrityError as e:
         await session.rollback()
-        if user_email:
+        if _pg_code(e) == UNIQUE_VIOLATION and user_email:
             raise EmailAlreadyExistsError(user_email) from e
         raise FailedToUpdateUserError from e
     except SQLAlchemyError as e:
@@ -283,6 +396,50 @@ async def update_user(
     
     await session.refresh(user)
     return user
+
+
+async def _move_storekeepers_with_manager(
+    session: AsyncSession,
+    manager: User,
+    new_warehouse_id: int | None,
+) -> None:
+    """Storekeepers follow their manager to the new warehouse.
+
+    The cascade is allowed only while the manager is the sole active manager of
+    the warehouse — otherwise we would take someone else's storekeepers away.
+    When a safe move is impossible the reassignment is rejected instead of
+    leaving storekeepers orphaned or detached from the warehouse.
+    """
+    old_warehouse_id: int | None = manager.warehouse_id
+    if old_warehouse_id is None or old_warehouse_id == new_warehouse_id:
+        return
+
+    if await count_storekeepers(session, old_warehouse_id) == 0:
+        return
+
+    if new_warehouse_id is None:
+        raise ManagerHasStorekeepersError(
+            "The warehouse cannot be detached: it still has storekeepers assigned"
+        )
+
+    if await count_active_managers(session, old_warehouse_id, exclude_user_id=manager.id) > 0:
+        raise ManagerHasStorekeepersError(
+            "Another manager is responsible for this warehouse: move the storekeepers manually"
+        )
+
+    storekeeper_role: Role | None = await get_role_by_name(session, RoleName.WORKER)
+    if storekeeper_role is None:
+        raise RoleNotFoundError(RoleName.WORKER.value)
+
+    await session.execute(
+        update(User)
+        .where(
+            User.warehouse_id == old_warehouse_id,
+            User.role_id == storekeeper_role.id,
+        )
+        .values(warehouse_id=new_warehouse_id)
+    )
+
 
 #функція для прив'язки складу до менджера складу або зняття 
 async def assign_warehouse(
@@ -306,6 +463,9 @@ async def assign_warehouse(
         if warehouse is None:
             raise WareHouseNotFoundError(warehouse_id)
         
+    #комірники цього менеджера переїжджають разом з ним
+    await _move_storekeepers_with_manager(session, user, warehouse_id)
+    
     #оновлення занчення в пам'яті
     user.warehouse_id = warehouse_id
     
