@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_async_session
-from app.core.enums import SupplierStatus
+from app.core.enums import SupplierStatus, RecipientStatus
 from app.core.rbac import COUNTERPARTY_ROLES
 from app.counterparties import crud
 from app.counterparties.schemas import (
@@ -12,8 +12,12 @@ from app.counterparties.schemas import (
     SupplierListResponse,
     SupplierRead,
     SupplierUpdate,
+    RecipientCreate,
+    RecipientListResponse,
+    RecipientRead,
+    RecipientUpdate,
 )
-from app.products.models import Supplier
+from app.products.models import Supplier, Recipient
 from app.utils.security import require_roles
 
 
@@ -109,6 +113,89 @@ async def update_supplier(
 async def delete_supplier(supplier_id: int, session: AsyncSession = Depends(get_async_session)):
     supplier = await get_supplier_or_404(session, supplier_id)
                                                                 # Коли з'являться накладні — забороняти видалення постачальника,
-                                                                # на якого вони посилаються (409), і пропонувати статус inactive (архів).
+                                                                # на якого вони посилаються, і пропонувати статус inactive (архів).
     await crud.delete_supplier(session, supplier)
+    return None
+
+
+
+# Одержувачі ──────────────────────────────────────────────────────────
+
+recipients_router = APIRouter(
+    prefix="/api/v1/recipients",
+    tags=["Recipients"],
+    dependencies=[Depends(require_roles(*COUNTERPARTY_ROLES))],
+)
+
+
+def to_recipient_read(recipient: Recipient) -> RecipientRead:
+    return RecipientRead(
+        recipient_id=recipient.id,
+        company_name=recipient.company_name,
+        tax_id=recipient.tax_id,
+        contact_person=recipient.contact_person,
+        phone_number=recipient.phone_number,
+        email=recipient.email,
+        address=recipient.address,
+        status=recipient.status,
+        created_at=recipient.created_at,
+    )
+
+
+async def get_recipient_or_404(session: AsyncSession, recipient_id: int) -> Recipient:
+    recipient = await crud.get_recipient(session, recipient_id)
+    if recipient is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Одержувача не знайдено")
+    return recipient
+
+
+@recipients_router.get("", response_model=RecipientListResponse)
+async def list_recipients(
+    search: str | None = Query(None, max_length=100),
+    status_filter: RecipientStatus | None = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    session: AsyncSession = Depends(get_async_session),
+):
+    recipients, total = await crud.list_recipients(
+        session, search=search, status=status_filter, page=page, page_size=page_size
+    )
+    return RecipientListResponse(
+        items=[to_recipient_read(recipient) for recipient in recipients],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=max(1, math.ceil(total / page_size)),
+    )
+
+
+@recipients_router.get("/{recipient_id}", response_model=RecipientRead)
+async def get_recipient(recipient_id: int, session: AsyncSession = Depends(get_async_session)):
+    recipient = await get_recipient_or_404(session, recipient_id)
+    return to_recipient_read(recipient)
+
+
+@recipients_router.post("", response_model=RecipientRead, status_code=status.HTTP_201_CREATED)
+async def create_recipient(payload: RecipientCreate, session: AsyncSession = Depends(get_async_session)):
+    recipient = await crud.create_recipient(session, payload)
+    return to_recipient_read(recipient)
+
+
+@recipients_router.patch("/{recipient_id}", response_model=RecipientRead)
+async def update_recipient(
+    recipient_id: int,
+    payload: RecipientUpdate,
+    session: AsyncSession = Depends(get_async_session),
+):
+    recipient = await get_recipient_or_404(session, recipient_id)
+    recipient = await crud.update_recipient(session, recipient, payload)
+    return to_recipient_read(recipient)
+
+
+@recipients_router.delete("/{recipient_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_recipient(recipient_id: int, session: AsyncSession = Depends(get_async_session)):
+    recipient = await get_recipient_or_404(session, recipient_id)
+                                                                    # Коли з'являться вихідні накладні — забороняти видалення одержувача,
+                                                                    # на якого вони посилаються, і пропонувати статус inactive (архів).
+    await crud.delete_recipient(session, recipient)
     return None
