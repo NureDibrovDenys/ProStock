@@ -4,6 +4,7 @@ import type { Permission } from '../api/types';
 import { ROLE_LABELS } from '../api/users';
 import { useAuth } from '../auth/AuthContext';
 import { cx } from '../lib/cx';
+import { WarehouseSwitcher } from './WarehouseSwitcher';
 import styles from './NavBar.module.css';
 
 /** Вкладка видима, якщо є хоча б одне з прав (null — для всіх). */
@@ -49,6 +50,8 @@ export function NavBar() {
           </NavLink>
         ))}
       </nav>
+      {/* Адміністратор перемикає поточний склад; решта ролей працює зі своїм */}
+      <WarehouseSwitcher />
       <div className={styles.spacer} />
       {user ? (
         <div className={styles.user}>

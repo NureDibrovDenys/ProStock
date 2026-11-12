@@ -101,7 +101,8 @@ export function NewEmployeePage() {
     enabled: !isManagerMode,
   });
 
-  const [form, setForm] = useState<FormState>(() => emptyForm(isManagerMode ? defaultWarehouseId : null));
+  // Для менеджера це його власний склад, для адміністратора — обраний у перемикачі
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultWarehouseId));
   const [errors, setErrors] = useState<Errors>({});
 
   const storekeeperQuery = useQuery({

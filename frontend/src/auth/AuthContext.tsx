@@ -16,6 +16,7 @@ import {
   setSessionListener,
 } from '../api/client';
 import type { Permission, Session } from '../api/types';
+import { setSelectedWarehouse } from '../hooks/useWarehouseSelection';
 
 type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 
@@ -50,6 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setSession(null);
     setStatus('anonymous');
+    // Вибір складу належить сесії: наступний користувач у цьому браузері починає з нуля
+    setSelectedWarehouse(null);
     if (reason) {
       try {
         sessionStorage.setItem(LOGOUT_REASON_KEY, reason);

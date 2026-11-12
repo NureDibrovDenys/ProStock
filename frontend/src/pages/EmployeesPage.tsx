@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
 import type { User, UserStatus } from '../api/types';
 import { ROLE_LABELS, getStorekeepers, getUsers, updateUser } from '../api/users';
@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
 import { getWarehouses } from '../api/warehouse';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { Select } from '../components/Select';
 
 import styles from './EmployeesPage.module.css';
@@ -22,7 +23,16 @@ export function EmployeesPage() {
   const isManagerMode = !can('users_manage') && can('storekeepers_manage');
 
   /**стан фільтра та запит складів (список складів доступний лише адміністратору) */
-  const [warehouseFilter, setWarehouseFilter] = useState('');
+  const currentWarehouseId = useCurrentWarehouse();
+  const [warehouseFilter, setWarehouseFilter] = useState(() =>
+    currentWarehouseId === null ? '' : String(currentWarehouseId),
+  );
+
+  // Перемикач поточного складу в навбарі змінює і фільтр списку
+  useEffect(() => {
+    setWarehouseFilter(currentWarehouseId === null ? '' : String(currentWarehouseId));
+  }, [currentWarehouseId]);
+
   const warehousesQuery = useQuery({
     queryKey: ['warehouses'],
     queryFn: getWarehouses,
