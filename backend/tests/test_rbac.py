@@ -84,5 +84,21 @@ async def test_permissions_payload_matches_role(client: AsyncClient):
         "products_import": False,
         "products_export": True,
         "users_manage": False,
+        "storekeepers_manage": False,
         "warehouse_map_write": False,
     }
+
+
+async def test_map_write_permission_only_for_admin(client: AsyncClient):
+    """Підказка для UI має збігатися з бекендом: PUT мапи дозволений лише адмінам (FR-2.1)."""
+    manager_token = await login(client, MANAGER)
+    manager_me = (await client.get(f"{API}/auth/me", headers=auth(manager_token))).json()
+    assert manager_me["permissions"]["warehouse_map_write"] is False
+    assert manager_me["permissions"]["products_write"] is True
+    assert manager_me["permissions"]["storekeepers_manage"] is True
+    assert manager_me["permissions"]["users_manage"] is False
+
+    admin_token = await login(client, ADMIN)
+    admin_me = (await client.get(f"{API}/auth/me", headers=auth(admin_token))).json()
+    assert admin_me["permissions"]["warehouse_map_write"] is True
+    assert admin_me["permissions"]["storekeepers_manage"] is False

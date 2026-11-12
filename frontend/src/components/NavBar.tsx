@@ -1,15 +1,20 @@
 import { LogOut, Package, Users, Warehouse } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import type { Permission } from '../api/types';
 import { ROLE_LABELS } from '../api/users';
 import { useAuth } from '../auth/AuthContext';
 import { cx } from '../lib/cx';
 import styles from './NavBar.module.css';
 
-const TABS = [
-  { to: '/products', label: 'Товари', end: false, permission: 'products_read' },
-  { to: '/employees', label: 'Співробітники', end: false, permission: 'users_manage' },
+/** Вкладка видима, якщо є хоча б одне з прав (null — для всіх). */
+type Tab = { to: string; label: string; end: boolean; permission: Permission[] | null };
+
+const TABS: Tab[] = [
+  { to: '/products', label: 'Товари', end: false, permission: ['products_read'] },
+  // Адміністратор бачить усіх співробітників, менеджер складу — комірників свого складу
+  { to: '/employees', label: 'Співробітники', end: false, permission: ['users_manage', 'storekeepers_manage'] },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
-] as const;
+];
 
 export function NavBar() {
   const { session, logout, can } = useAuth();
@@ -20,7 +25,7 @@ export function NavBar() {
     navigate('/login', { replace: true });
   };
 
-  const visibleTabs = TABS.filter((tab) => !tab.permission || can(tab.permission));
+  const visibleTabs = TABS.filter((tab) => !tab.permission || tab.permission.some(can));
   const user = session?.user;
 
   return (

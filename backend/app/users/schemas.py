@@ -229,6 +229,38 @@ class StorekeeperCreatePayload(BaseModel):
          return validate_password_strength(value)
 
     
+class StorekeeperUpdatePayload(BaseModel):
+    """Зміни облікового запису комірника менеджером: лише особисті дані та пароль.
+    Роль, склад і статус менеджер через цей payload змінити не може."""
+    first_name: str | None = Field(None, min_length=1, max_length=100)
+    last_name: str | None = Field(None, min_length=1, max_length=100)
+    user_email: EmailStr | None = Field(
+        None,
+        validation_alias=AliasChoices("user_email", "email"),
+        serialization_alias="user_email",
+    )
+    password: str | None = Field(None, min_length=MIN_PASSWORD_LENGTH)
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def trim_first_and_last_names(cls, value: Any) -> Any:
+        return trim_names(value)
+
+    @field_validator("user_email")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return normalize_and_validate_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_password_strength(value)
+
+
 class UserUpdatePayload(BaseModel):
     first_name: str | None = Field(
         None,
@@ -293,18 +325,4 @@ class UserListResponse(BaseModel):
 class WarehouseAssignmentPayload(BaseModel):
     warehouse_id: int | None = Field(..., gt=0, description="Warehouse ID. Null removes the warehouse assignment.")
 
-def serialize_user(user) -> UserListItem:
-    """ORM User → елемент списку для фронтенду."""
-    return UserListItem(
-        user_id=user.id,
-        user_email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        role=user.role.name if user.role else RoleName.GUEST,
-        status=user.status,
-        warehouse_id=user.warehouse_id or 1,
-        position=None,
-        on_shift=False,
-        created_at=user.created_at,
-    )
 

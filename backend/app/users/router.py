@@ -86,7 +86,7 @@ async def list_users(
         None,
         max_length=100,
         description="Case-insensitive search by name or email",
-        example={
+        examples={
             "default": {
                 "summary": "Search by part of a name",
                 "value": "Alex"
@@ -101,6 +101,11 @@ async def list_users(
         None,
         alias="status",
         description="Filter by a user status"
+    ),
+    warehouse_id: int | None = Query(
+        None,
+        gt=0,
+        description="Filter users by Warehouse ID"
     ),
     page: int = Query(
         1,
@@ -123,6 +128,7 @@ async def list_users(
         user_status=user_status,
         page=page,
         page_size=page_size,
+        warehouse_id=warehouse_id
     )
     return UserListResponse(
         items=[_to_item(user) for user in users],
@@ -185,7 +191,7 @@ async def create_user(
     return _to_item(user)
 
 
-@router.post(
+@router.put(
     "/{user_id}/warehouse",
     response_model=UserListItem,
     summary="Assign a warehouse to a manager",

@@ -119,13 +119,17 @@ async def list_users(
     search: str | None = None,
     role_name: RoleName | None = None,
     user_status: UserStatus | None = None,
+    warehouse_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[User], int]:
     """Returns a page of users and the total number of users."""
-    
+
     conditions: list = []
-    
+
+    if warehouse_id is not None:
+        conditions.append(User.warehouse_id == warehouse_id)
+
     if search and search.strip():
         pattern: str = f"%{search.strip()}%"
         conditions.append(
@@ -146,6 +150,9 @@ async def list_users(
     
     if user_status is not None:
         conditions.append(User.status == user_status)
+        
+    if warehouse_id is not None:
+        conditions.append(User.warehouse_id == warehouse_id)
     
     count_stmt = (
         select(func.count(User.id))
@@ -163,6 +170,8 @@ async def list_users(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
+    
+   
     
     rows_result = await session.scalars(users_stmt)
     rows = rows_result.all()
@@ -294,7 +303,7 @@ async def assign_warehouse(
     if warehouse_id is not None:
         warehouse = await session.get(Warehouse, warehouse_id)
         
-        if warehouse_id is None:
+        if warehouse is None:
             raise WareHouseNotFoundError(warehouse_id)
         
     #оновлення занчення в пам'яті
