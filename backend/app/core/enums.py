@@ -40,7 +40,7 @@ class ObstacleType(str, Enum):
     OTHER = "other"
 
 class PointType(str, Enum):
-    INBOUND = "inbound" # Точка прийому
+    INBOUND = "inbound" # Точка прийняття
     OUTBOUND = "outbound" # Точка відвантаження
     GENERAL_ENTRY = "general_entry" # Основний вхід
 
@@ -61,3 +61,10 @@ class RecipientStatus(str, Enum):
     ACTIVE = "active" # Дозвіл на співпрацю
     INACTIVE = "inactive" # Архівування (видалення)
     BLOCKED = "blocked" # Заборона співпраці
+
+class OrderStatus(str, Enum):
+    DRAFT = "draft"
+    IN_PROGRESS = "in_progress"
+    READY = "ready" # сформовано завдання
+    COMPLETED = "completed"
+    CANCELED = "canceled"
