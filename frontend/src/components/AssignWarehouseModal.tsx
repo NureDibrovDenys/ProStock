@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { User } from '../api/types';
 import { assignUserWarehouse } from '../api/users';
@@ -121,7 +122,13 @@ export function AssignWarehouseModal({ user, onClose }: Props) {
           </Select>
 
           {warehousesQuery.data.length === 0 && (
-            <p>Складів ще немає. Можна лише зняти поточне призначення.</p>
+            <p>
+              Складів ще немає. Можна лише зняти поточне призначення або{' '}
+              <Link to="/warehouses" onClick={handleClose}>
+                створити склад
+              </Link>
+              .
+            </p>
           )}
         </>
       )}
