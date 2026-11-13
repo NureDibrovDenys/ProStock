@@ -152,7 +152,7 @@ class InboundOrderItem(Base):
         CheckConstraint(
             "quantity > 0",
             name="check_inbound_order_item_quantity_positive",
-        )
+        ),
     )
     
     def __repr__(self) -> str:
