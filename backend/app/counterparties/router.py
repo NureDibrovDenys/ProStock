@@ -2,6 +2,7 @@ import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import get_async_session
 from app.core.enums import SupplierStatus, RecipientStatus
@@ -50,6 +51,7 @@ async def get_supplier_or_404(session: AsyncSession, supplier_id: int) -> Suppli
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Постачальника не знайдено")
     return supplier
 
+TAX_ID_CONFLICT = "Постачальник з таким ЄДРПОУ / ІПН уже існує"
 
 async def ensure_tax_id_is_free(
     session: AsyncSession, tax_id: str | None, exclude_id: int | None = None
@@ -59,7 +61,7 @@ async def ensure_tax_id_is_free(
     if await crud.find_supplier_by_tax_id(session, tax_id, exclude_id) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Постачальник з таким ЄДРПОУ / ІПН уже існує",
+            detail=TAX_ID_CONFLICT,
         )
 
 
@@ -92,7 +94,11 @@ async def get_supplier(supplier_id: int, session: AsyncSession = Depends(get_asy
 @suppliers_router.post("", response_model=SupplierRead, status_code=status.HTTP_201_CREATED)
 async def create_supplier(payload: SupplierCreate, session: AsyncSession = Depends(get_async_session)):
     await ensure_tax_id_is_free(session, payload.tax_id)
-    supplier = await crud.create_supplier(session, payload)
+    try:
+        supplier = await crud.create_supplier(session, payload)
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=TAX_ID_CONFLICT)
     return to_supplier_read(supplier)
 
 
@@ -105,7 +111,11 @@ async def update_supplier(
     supplier = await get_supplier_or_404(session, supplier_id)
     if "tax_id" in payload.model_fields_set:
         await ensure_tax_id_is_free(session, payload.tax_id, exclude_id=supplier.id)
-    supplier = await crud.update_supplier(session, supplier, payload)
+    try:
+        supplier = await crud.update_supplier(session, supplier, payload)
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=TAX_ID_CONFLICT)
     return to_supplier_read(supplier)
     
 
