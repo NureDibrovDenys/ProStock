@@ -130,7 +130,8 @@ async def update_warehouse(
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
 
-    if data.model_dump(exclude_none=True) == {}:
+    # exclude_unset: явний {"address": null} — це зміна (стерти адресу), а не порожнє тіло
+    if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Потрібно передати хоча б одне поле для оновлення",
