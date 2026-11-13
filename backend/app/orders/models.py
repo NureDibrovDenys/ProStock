@@ -162,3 +162,144 @@ class InboundOrderItem(Base):
     
     def __repr__(self) -> str:
         return f"InboundOrderItem(id={self.id!r}, inbound_order_id={self.inbound_order_id!r})"
+
+class OutboundOrder(Base):
+
+    __tablename__ = "outbound_order"
+
+    id: Mapped[int] = mapped_column(
+        "outbound_order_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    recipient_id: Mapped[int] = mapped_column(
+        "recipient_id",
+        BigInteger,
+        ForeignKey(
+            "recipient.recipient_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+    invoice_number: Mapped[str] = mapped_column(
+        "invoice_number",
+        String(50),
+        nullable=False,
+        unique=True,
+    )
+    planned_shipment_date: Mapped[datetime] = mapped_column(
+        "planned_shipment_date",
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    order_status: Mapped[OrderStatus] = mapped_column(
+        "order_status",
+        Enum(
+            OrderStatus,
+            name="order_status",
+            native_enum=False,
+        ),
+        nullable=False,
+        default=OrderStatus.DRAFT,
+    )
+    created_by_user_id: Mapped[int] = mapped_column(
+        "created_by_user_id",
+        BigInteger,
+        ForeignKey(
+            "user.user_id",
+            ondelete="RESTRICT"
+        ),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at",
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    recipient = relationship(
+        "Recipient",
+        lazy="selectin",
+    )
+    created_by_user = relationship(
+        "User",
+        lazy="selectin",
+    )
+    items: Mapped[list["OutboundOrderItem"]] = relationship(
+        back_populates="outbound_order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    def __repr__(self) -> str:
+        return f"OutboundOrder(id={self.id!r}, invoice_number={self.invoice_number!r})"
+
+
+class OutboundOrderItem(Base):
+
+    __tablename__ = "outbound_order_item"
+
+    id: Mapped[int] = mapped_column(
+        "outbound_order_item_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    outbound_order_id: Mapped[int] = mapped_column(
+        "outbound_order_id",
+        BigInteger,
+        ForeignKey(
+            "outbound_order.outbound_order_id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        index=True,
+    )
+    product_id: Mapped[int] = mapped_column(
+        "product_id",
+        BigInteger,
+        ForeignKey(
+            "product.product_id",
+            ondelete="RESTRICT"
+        ),
+        nullable=False,
+        index=True,
+    )
+    quantity: Mapped[int] = mapped_column(
+        "quantity",
+        Integer,
+        nullable=False,
+    )
+    package_type: Mapped[str] = mapped_column(
+        "package_type",
+        String(30),
+        nullable=False,
+    )
+
+    outbound_order: Mapped["OutboundOrder"] = relationship(
+        "OutboundOrder",
+        back_populates="items",
+    )
+    product = relationship(
+        "Product",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "quantity > 0",
+            name="check_outbound_order_item_quantity_positive",
+        ),
+        UniqueConstraint(
+            "outbound_order_id",
+            "product_id",
+            "package_type",
+            name="unique_outbound_order_product_package",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"OutboundOrderItem(id={self.id!r}, outbound_order_id={self.outbound_order_id!r})"
