@@ -93,6 +93,18 @@ async def get_rack_by_code(
 
 
 # ── Shelf ─────────────────────────────────────────────────────────────────────
+#повертає всі полиці конкретного стелажа
+async def get_shelves_by_rack(
+    session: AsyncSession,
+    rack_id:int,
+    
+)-> list[Shelf]:
+    result = await session.scalars(
+        select(Shelf).where(Shelf.rack_id == rack_id).order_by(Shelf.code)
+        
+    )
+    return list(result.all())
+
 
 async def get_shelf(session: AsyncSession, shelf_id: int) -> Shelf | None:
     """Повертає полицю за id або None."""

@@ -252,6 +252,85 @@ async def get_rack(
 
 # ── Shelf endpoints ───────────────────────────────────────────────────────────
 
+
+@router.get(
+    "/{warehouse_id}/racks/{rack_code}/shelves",
+    response_model=list[ShelfResponse],
+    summary="Отримати всі полиці стелажа",
+)
+async def list_shelves(
+    warehouse_id: int,
+    rack_code: str,
+    _: dict = Depends(require_authenticated),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[ShelfResponse]:
+
+    warehouse = await crud.get_warehouse(session, warehouse_id)
+
+    if warehouse is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Склад не знайдено"
+        )
+
+    rack = await crud.get_rack_by_code(
+        session, warehouse_id, rack_code
+    )
+
+    if rack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Стелаж не знайдено"
+        )
+
+    shelves = await crud.get_shelves_by_rack(session, rack.id)
+
+    return [_shelf_to_response(shelf) for shelf in shelves]
+
+
+@router.get(
+    "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",
+    response_model=ShelfResponse,
+    summary="Отримати полицю за ID",
+)
+async def get_shelf(
+    warehouse_id: int,
+    rack_code: str,
+    shelf_id: int,
+    _: dict = Depends(require_authenticated),
+    session: AsyncSession = Depends(get_async_session),
+) -> ShelfResponse:
+
+    warehouse = await crud.get_warehouse(session, warehouse_id)
+
+    if warehouse is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Склад не знайдено",
+        )
+
+    rack = await crud.get_rack_by_code(
+        session, warehouse_id, rack_code
+    )
+
+    if rack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Стелаж не знайдено",
+        )
+
+    shelf = await crud.get_shelf(session, shelf_id)
+
+    if shelf is None or shelf.rack_id != rack.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Полицю не знайдено",
+        )
+
+    return _shelf_to_response(shelf)
+
+
+
 @router.post(
     "/{warehouse_id}/racks/{rack_code}/shelves",
     response_model=ShelfResponse,
