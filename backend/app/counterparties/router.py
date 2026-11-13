@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.enums import SupplierStatus, RecipientStatus
-from app.core.rbac import COUNTERPARTY_ROLES
+from app.core.rbac import DIRECTORY_MANAGE_ROLES
 from app.counterparties import crud
 from app.counterparties.schemas import (
     SupplierCreate,
@@ -26,7 +26,7 @@ from app.utils.security import require_roles
 suppliers_router = APIRouter(
     prefix="/api/v1/suppliers",
     tags=["Suppliers"],
-    dependencies=[Depends(require_roles(*COUNTERPARTY_ROLES))],
+    dependencies=[Depends(require_roles(*DIRECTORY_MANAGE_ROLES))],
 )
 
 
@@ -124,7 +124,7 @@ async def delete_supplier(supplier_id: int, session: AsyncSession = Depends(get_
 recipients_router = APIRouter(
     prefix="/api/v1/recipients",
     tags=["Recipients"],
-    dependencies=[Depends(require_roles(*COUNTERPARTY_ROLES))],
+    dependencies=[Depends(require_roles(*DIRECTORY_MANAGE_ROLES))],
 )
 
 
