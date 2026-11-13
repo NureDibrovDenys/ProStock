@@ -6,6 +6,7 @@ import { RackFillChart } from '../components/RackFillChart';
 import { StatCard, StatGrid } from '../components/StatCard';
 import { Card, ErrorState, LoadingState, PageHeader } from '../components/ui';
 import { formatNumber, formatOperationTime, formatSigned, formatTime, plural } from '../lib/format';
+import { NoWarehouseState } from '../components/NoWarehouseState';
 import styles from './DashboardPage.module.css';
 
 export function DashboardPage() {
@@ -13,9 +14,18 @@ export function DashboardPage() {
   const warehouseName = useWarehouseName();
   const query = useQuery({
     queryKey: ['dashboard', warehouseId],
-    queryFn: () => getDashboard(warehouseId),
+    enabled: warehouseId !== null,
+    queryFn: () => {
+      if (warehouseId === null){
+        throw new Error('Склад не призначено');
+      }
+      return getDashboard(warehouseId);
+    }
   });
   const data = query.data;
+  if (warehouseId === null) {
+  return <NoWarehouseState />;
+}
 
   return (
     <>
