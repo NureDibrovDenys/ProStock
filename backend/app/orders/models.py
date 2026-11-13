@@ -10,7 +10,6 @@ from sqlalchemy import (
     func,
     DateTime,
     ForeignKey,
-    Integer,
     Numeric,
     CheckConstraint,
     UniqueConstraint,
@@ -153,16 +152,6 @@ class InboundOrderItem(Base):
         CheckConstraint(
             "quantity > 0",
             name="check_inbound_order_item_quantity_positive",
-        ),
-        # TODO:
-        #  -product_id?
-        #  -package_type?
-        #  +batch_number?
-        UniqueConstraint(
-            "inbound_order_id",
-            "product_id",
-            "package_type",
-            name="unique_order_product_package",
         )
     )
     
