@@ -127,6 +127,7 @@ class InboundOrderItem(Base):
         nullable=False,
         index=True,
     )
+    # TODO: Integer VS Numeric
     quantity: Mapped[int] = mapped_column(
         "quantity",
         Integer,
@@ -152,6 +153,10 @@ class InboundOrderItem(Base):
             "quantity > 0",
             name="check_inbound_order_item_quantity_positive",
         ),
+        # TODO:
+        #  -product_id?
+        #  -package_type?
+        #  +batch_number?
         UniqueConstraint(
             "inbound_order_id",
             "product_id",

@@ -5,6 +5,26 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.enums import OrderStatus
 
+# Inbound order item
+
+class InboundOrderItemCreate(BaseModel):
+    product_id: int
+    # TODO: int VS float VS Decimal
+    quantity: int = Field(..., gt=0)
+    # TODO: str VS package_type table (id, name)
+    package_type: str = Field(..., max_length=30)
+
+class InboundOrderItemResponse(BaseModel):
+    item_id: int
+    product_id: int
+    # TODO: int VS float VS Decimal
+    quantity: int
+    # TODO: str VS package_type table (id, name)
+    package_type: str = Field(..., max_length=30)
+    
+    # Allows Pydantic to read data directly from SQLAlchemy (ORM) models
+    model_config = ConfigDict(from_attributes=True)
+
 # Inbound order
 
 class InboundOrderCreate(BaseModel):
@@ -31,19 +51,5 @@ class InboundOrderResponse(BaseModel):
     created_at: datetime
     items: list[InboundOrderItemResponse]
     
-    model_config = ConfigDict(from_attributes=True)
-
-# Inbound order item
-
-class InboundOrderItemCreate(BaseModel):
-    product_id: int
-    quantity: int = Field(..., gt=0)
-    package_type: str = Field(..., max_length=30)
-
-class InboundOrderItemResponse(BaseModel):
-    item_id: int
-    product_id: int
-    quantity: int
-    package_type: str
-    
+    # Allows Pydantic to read data directly from SQLAlchemy (ORM) models
     model_config = ConfigDict(from_attributes=True)
