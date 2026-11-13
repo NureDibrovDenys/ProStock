@@ -112,8 +112,14 @@ async def update_supplier(
 @suppliers_router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_supplier(supplier_id: int, session: AsyncSession = Depends(get_async_session)):
     supplier = await get_supplier_or_404(session, supplier_id)
-                                                                # Коли з'являться накладні — забороняти видалення постачальника,
-                                                                # на якого вони посилаються, і пропонувати статус inactive (архів).
+    if await crud.supplier_has_inbound_orders(session, supplier.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Постачальника не можна видалити: на нього посилаються прихідні накладні. "
+                "Переведіть його в статус inactive (архів)."
+            ),
+        )
     await crud.delete_supplier(session, supplier)
     return None
 

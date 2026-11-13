@@ -1,9 +1,10 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import SupplierStatus, RecipientStatus
 from app.counterparties.schemas import SupplierCreate, SupplierUpdate, RecipientCreate, RecipientUpdate
 from app.products.models import Supplier, Recipient
+from app.orders.models import InboundOrder
 
 
 # Постачальники ──────────────────────────────────────────────────────────
@@ -75,6 +76,11 @@ async def update_supplier(
     await session.refresh(supplier)
     return supplier
 
+async def supplier_has_inbound_orders(session: AsyncSession, supplier_id: int) -> bool:
+    has_orders = await session.scalar(
+        select(exists().where(InboundOrder.supplier_id == supplier_id))
+    )
+    return bool(has_orders)
 
 async def delete_supplier(session: AsyncSession, supplier: Supplier) -> None:
     await session.delete(supplier)
