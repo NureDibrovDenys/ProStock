@@ -31,8 +31,6 @@ from app.utils.security import (
     get_current_admin_user,
     require_roles
 )
-from app import warehouses
-from app.warehouses.services.warehouse_map_service import WarehouseMapNotFound
 
 router: APIRouter = APIRouter(
     prefix="/api/v1/users",
@@ -157,7 +155,11 @@ async def list_users(
             "description": "A user with this email is already registered"
         },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "The specified role does not exists or the data failed validation"
+            "description": (
+                "The specified role or warehouse does not exist, "
+                "a storekeeper was requested without a warehouse, "
+                "or the data failed validation"
+            )
         },
     } | COMMON_RESPONSES,
 )
@@ -187,6 +189,16 @@ async def create_user(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="The specified role does not exists",
         ) from e
+    except crud.WareHouseNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The specified warehouse does not exist",
+        ) from e
+    except crud.WarehouseRequiredForStorekeeperError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A storekeeper must be assigned to a warehouse",
+        ) from e
 
     return _to_item(user)
 
@@ -197,13 +209,19 @@ async def create_user(
     summary="Assign a warehouse to a manager",
     description=("Available only to admins. "
                  "Assigns a warehouse to a warehouse manager. "
-                 "Passing null removes the warehouse assignment."),
+                 "Passing null removes the warehouse assignment. "
+                 "The storekeepers of the warehouse move together with their "
+                 "manager, so a storekeeper always stays at the warehouse of "
+                 "the manager who created them."),
     responses={
         status.HTTP_200_OK: {
             "description": "Warehouse assignment successfully updated"
         },
         status.HTTP_404_NOT_FOUND: {
             "description": "User or warehouse not found"
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": "The reassignment would orphan the storekeepers of the warehouse"
         },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "The specified user is not a warehouse manager"
@@ -245,6 +263,13 @@ async def assign_manager_warehouse(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="A warehouse with this ID not found"
+        )from e
+
+        # комірники складу лишилися б без свого менеджера
+    except crud.ManagerHasStorekeepersError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
         )from e
 
         # помилка запису в БД
@@ -302,7 +327,9 @@ async def get_user(
     description=(
         "Allows updating user information. "
         "Admins can edit anyone; "
-        "regular users can only edit their own profile."
+        "regular users can only edit their own profile. "
+        "Passing warehouse_id moves the user to another warehouse, "
+        "passing null detaches the warehouse (not allowed for storekeepers)."
     ),
     responses={
         status.HTTP_200_OK: {
@@ -312,7 +339,11 @@ async def get_user(
             "description": "Conflict (forbidden action)"
         },
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
-            "description": "The specified role does not exist, or validation error."
+            "description": (
+                "The specified role or warehouse does not exist, "
+                "a storekeeper would be left without a warehouse, "
+                "or validation error."
+            )
         }
     } | COMMON_RESPONSES | NOT_FOUND_RESPONSE,
 )
@@ -400,9 +431,13 @@ async def update_user(
             detail="You cannot deactivate your own account",
         )
 
-    # TODO
-    # warehouse_id: передаємо sentinel ..., якщо поле не було у запиті
-    # wh_sentinel = payload.warehouse_id if payload.warehouse_id is not None else ...
+    # warehouse_id: sentinel ..., якщо поля не було у запиті — так відрізняємо
+    # «не чіпати склад» від «зняти склад» (явний null)
+    warehouse_sentinel = (
+        payload.warehouse_id
+        if "warehouse_id" in payload.model_fields_set
+        else ...
+    )
 
     try:
         updated: User = await crud.update_user(
@@ -414,7 +449,7 @@ async def update_user(
             last_name=payload.last_name.strip() if payload.last_name else None,
             role_name=payload.role,
             user_status=payload.status,
-            # warehouse_id=wh_sentinel,
+            warehouse_id=warehouse_sentinel,
         )
     except crud.EmailAlreadyExistsError as e:
         raise HTTPException(
@@ -425,6 +460,16 @@ async def update_user(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Specified role does not exist",
+        ) from e
+    except crud.WareHouseNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The specified warehouse does not exist",
+        ) from e
+    except crud.WarehouseRequiredForStorekeeperError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A storekeeper must be assigned to a warehouse",
         ) from e
 
     return _to_item(updated)

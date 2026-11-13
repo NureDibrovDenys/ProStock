@@ -23,7 +23,7 @@ type FormState = {
   user_email: string;
   password: string;
   role: RoleName;
-  warehouse_id: number;
+  warehouse_id: number | null;
 };
 
 type Errors = Partial<Record<keyof FormState, string>>;
@@ -65,7 +65,7 @@ function fieldErrorsFrom(error: ApiError): Errors {
   return errors;
 }
 
-const emptyForm = (warehouseId: number): FormState => ({
+const emptyForm = (warehouseId: number | null): FormState => ({
   first_name: '',
   last_name: '',
   user_email: '',
@@ -89,7 +89,7 @@ export function NewEmployeePage() {
   const editId = userId ? Number(userId) : null;
   const isEdit = editId !== null;
   const isManagerMode = isEdit || (!can('users_manage') && can('storekeepers_manage'));
-  // useCurrentWarehouse() підставляє склад №1 для профілів без складу — для менеджера це хибна підказка,
+  // Менеджер без призначеного складу не може керувати комірниками.
   // тому відсутність складу перевіряємо напряму за профілем.
   const managerWithoutWarehouse = isManagerMode && session?.user.warehouse_id == null;
 
@@ -101,7 +101,7 @@ export function NewEmployeePage() {
     enabled: !isManagerMode,
   });
 
-  const [form, setForm] = useState<FormState>(() => emptyForm(defaultWarehouseId));
+  const [form, setForm] = useState<FormState>(() => emptyForm(isManagerMode ? defaultWarehouseId : null));
   const [errors, setErrors] = useState<Errors>({});
 
   const storekeeperQuery = useQuery({
@@ -310,17 +310,36 @@ export function NewEmployeePage() {
           />
         ) : (
           <Select
-            label="Склад *"
-            value={String(form.warehouse_id)}
-            onChange={(event) => setForm((prev) => ({ ...prev, warehouse_id: Number(event.target.value) }))}
+            label="Склад"
+            value={form.warehouse_id === null ? '' : String(form.warehouse_id)}
+            onChange={(event) => {
+              const value = event.target.value;
+
+              setForm((prev) => ({
+                ...prev,
+                warehouse_id: value === '' ? null : Number(value),
+              }));
+
+              setErrors((prev) => ({
+                ...prev,
+                warehouse_id: undefined,
+              }));
+
+              mutation.reset();
+            }}
             disabled={warehousesQuery.isPending || warehousesQuery.isError}
+            error={errors.warehouse_id}
           >
+            <option value="">Без складу</option>
+
             {warehousesQuery.data?.map((warehouse) => (
-              <option key={warehouse.warehouse_id} value={warehouse.warehouse_id}>
+              <option
+                key={warehouse.warehouse_id}
+                value={String(warehouse.warehouse_id)}
+              >
                 {warehouse.warehouse_name}
               </option>
             ))}
-            {!warehousesQuery.data?.length && <option value={defaultWarehouseId}>Склад №{defaultWarehouseId}</option>}
           </Select>
         )}
 

@@ -12,6 +12,7 @@ import { ErrorState, LoadingState, PageHeader } from '../components/ui';
 import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useViewport } from '../hooks/useViewport';
 import { useWarehouseName } from '../hooks/useWarehouse';
+import { NoWarehouseState } from '../components/NoWarehouseState';
 import { cx } from '../lib/cx';
 import styles from './WarehousePage.module.css';
 
@@ -32,12 +33,26 @@ export function WarehousePage() {
   const warehouseName = useWarehouseName();
   const mapQuery = useQuery({
     queryKey: ['map', warehouseId],
-    queryFn: () => getWarehouseMap(warehouseId),
+    enabled: warehouseId !== null,
+    queryFn: () => {
+       if (warehouseId === null) {
+      throw new Error('Склад не призначено');
+    }
+
+    return getWarehouseMap(warehouseId);
+    }
   });
-  const racksQuery = useQuery({
-    queryKey: ['racks', warehouseId],
-    queryFn: () => getRacks(warehouseId),
-  });
+ const racksQuery = useQuery({
+  queryKey: ['racks', warehouseId],
+  enabled: warehouseId !== null,
+  queryFn: () => {
+    if (warehouseId === null) {
+      throw new Error('Склад не призначено');
+    }
+
+    return getRacks(warehouseId);
+  },
+});
 
   const objs = useMemo(() => (mapQuery.data ? fromApi(mapQuery.data) : []), [mapQuery.data]);
   const fills = useMemo(
@@ -82,7 +97,9 @@ export function WarehousePage() {
   };
 
   const isEmpty = mapQuery.isSuccess && objs.length === 0;
-
+if (warehouseId === null) {
+  return <NoWarehouseState />;
+}
   return (
     <>
       <PageHeader
