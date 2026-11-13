@@ -130,6 +130,8 @@ export function MapEditorPage() {
   }
   return (
     <Editor
+      // Інший склад (перемикач адміністратора) — новий редактор із власною історією undo
+      key={warehouseId}
       initial={query.data ? fromApi(query.data) : []}
       loadError={query.isError ? query.error : null}
       onRetry={() => query.refetch()}

@@ -67,3 +67,30 @@
   font-size: 13px;
   color: var(--color-muted);
 }
+
+.warehouseField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Створення складу просто з форми — новий склад одразу обирається */
+.newWarehouse {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.newWarehouse:hover {
+  text-decoration: underline;
+}
+
+.warehouseHint {
+  font-size: 13px;
+  color: var(--color-muted);
+}

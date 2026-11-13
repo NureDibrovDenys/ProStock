@@ -47,9 +47,10 @@ async def update_warehouse(
 ) -> Warehouse:
     """
     Частково оновлює склад.
-    Змінює лише ті поля, що явно передані в тілі запиту (не None).
+    Змінює лише ті поля, що явно передані в тілі запиту.
+    Явний null для адреси стирає її (name і total_area null не приймають — див. WarehouseUpdate).
     """
-    update_data = data.model_dump(exclude_none=True)
+    update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(warehouse, field, value)
     await session.commit()
