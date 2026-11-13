@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -10,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     CheckConstraint,
     UniqueConstraint,
 )
@@ -127,10 +129,9 @@ class InboundOrderItem(Base):
         nullable=False,
         index=True,
     )
-    # TODO: Integer VS Numeric
-    quantity: Mapped[int] = mapped_column(
+    quantity: Mapped[Decimal] = mapped_column(
         "quantity",
-        Integer,
+        Numeric(precision=10, scale=2),
         nullable=False,
     )
     package_type: Mapped[str] = mapped_column(

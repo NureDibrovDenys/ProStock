@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.enums import OrderStatus
@@ -9,16 +10,19 @@ from app.core.enums import OrderStatus
 
 class InboundOrderItemCreate(BaseModel):
     product_id: int
-    # TODO: int VS float VS Decimal
-    quantity: int = Field(..., gt=0)
+    quantity: Decimal = Field(
+        ...,
+        gt=Decimal("0"),
+        max_digits=10,
+        decimal_places=2,
+    )
     # TODO: str VS package_type table (id, name)
     package_type: str = Field(..., max_length=30)
 
 class InboundOrderItemResponse(BaseModel):
     item_id: int
     product_id: int
-    # TODO: int VS float VS Decimal
-    quantity: int
+    quantity: Decimal
     # TODO: str VS package_type table (id, name)
     package_type: str = Field(..., max_length=30)
     
