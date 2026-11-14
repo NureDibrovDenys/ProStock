@@ -64,7 +64,7 @@ type HeaderFields = { recipientId: string; date: string };
 const NO_ERRORS: Errors = { lines: {} };
 const PACKAGES: PackageType[] = ['box', 'pallet'];
 const DUPLICATE = (pkg: PackageType) =>
-  `Уже є в накладній з пакуванням «${PACKAGE_LABELS[pkg]}» — збільште кількість у тому рядку`;
+  `Уже є в накладній з пакуванням «${PACKAGE_LABELS[pkg]}» - збільште кількість у тому рядку`;
 
 let nextKey = 1;
 const emptyLine = (): Line => ({ key: nextKey++, product: null, quantity: '', packageType: 'box' });
@@ -248,7 +248,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 404 && /recipient/i.test(error.message)) {
-        setErrors((prev) => ({ ...prev, recipient: 'Одержувача немає в базі — оберіть іншого' }));
+        setErrors((prev) => ({ ...prev, recipient: 'Одержувача немає в базі - оберіть іншого' }));
       }
     },
   });
@@ -399,7 +399,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
       )}
       {readOnly && (
         <p className={styles.info}>
-          Накладна вже в статусі «{ORDER_STATUS_LABELS[status]}» — редагувати можна лише чернетки.
+          Накладна вже в статусі «{ORDER_STATUS_LABELS[status]}» - редагувати можна лише чернетки.
         </p>
       )}
 
@@ -542,7 +542,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
                     </div>
                     <div className={styles.cell} role="cell" data-label="Од. виміру">
                       <span className={cx(styles.readout, styles.small)} title="Одиниця виміру товару з каталогу">
-                        {line.product ? unitLabel(line.product) : '—'}
+                        {line.product ? unitLabel(line.product) : '-'}
                       </span>
                     </div>
                     <div className={styles.cell} role="cell" data-label="Пакування">
@@ -678,7 +678,7 @@ function StockCell({
   unavailable: boolean;
   short: boolean;
 }) {
-  if (!product) return <span className={cx(styles.stock, styles.stockMuted)}>—</span>;
+  if (!product) return <span className={cx(styles.stock, styles.stockMuted)}>-</span>;
   if (loading) {
     return (
       <span className={cx(styles.stock, styles.stockMuted)}>
@@ -689,7 +689,7 @@ function StockCell({
   if (unavailable || available === null) {
     return (
       <span className={cx(styles.stock, styles.stockMuted)} title="Залишки поки недоступні">
-        —
+        -
       </span>
     );
   }

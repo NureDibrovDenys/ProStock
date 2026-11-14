@@ -36,7 +36,7 @@ const FORM_FIELDS: Array<keyof FormState> = [
   'inactive_reason',
 ];
 
-/** Причини недоступності полиці (backend: InactiveReason) — спільні для форми та сторінки стелажа. */
+/** Причини недоступності полиці (backend: InactiveReason) - спільні для форми та сторінки стелажа. */
 export const INACTIVE_REASONS: Array<{ value: InactiveReason; label: string }> = [
   { value: 'damaged', label: 'Пошкодження' },
   { value: 'maintenance', label: 'Технічне обслуговування' },
@@ -50,7 +50,7 @@ function parseDecimal(value: string): number | null {
   return value.trim() && Number.isFinite(n) ? n : null;
 }
 
-/** Габарити — decimal(8, 2) > 0 на бекенді: до 6 цифр до коми, 2 після. */
+/** Габарити - decimal(8, 2) > 0 на бекенді: до 6 цифр до коми, 2 після. */
 function validateDimension(raw: string): string | undefined {
   const trimmed = raw.trim();
   if (parseDecimal(trimmed) === null) return 'Вкажіть число';
@@ -59,7 +59,7 @@ function validateDimension(raw: string): string | undefined {
   return undefined;
 }
 
-/** Навантаження — decimal(10, 3) > 0 на бекенді: до 7 цифр до коми, 3 після. */
+/** Навантаження - decimal(10, 3) > 0 на бекенді: до 7 цифр до коми, 3 після. */
 function validateWeight(raw: string): string | undefined {
   const trimmed = raw.trim();
   if (parseDecimal(trimmed) === null) return 'Вкажіть число';
@@ -81,7 +81,7 @@ function validate(form: FormState, isEdit: boolean): Errors {
   }
   const weightError = validateWeight(form.max_weight);
   if (weightError) errors.max_weight = weightError;
-  // Статус «occupied» не можна встановити вручну — його визначають складські операції
+  // Статус «occupied» не можна встановити вручну - його визначають складські операції
   if (form.status === 'inactive' && !form.inactive_reason) {
     errors.inactive_reason = 'Вкажіть причину недоступності';
   }
@@ -90,7 +90,7 @@ function validate(form: FormState, isEdit: boolean): Errors {
 
 /**
  * Створення (shelf не передано) або редагування полиці стелажа.
- * Код полиці змінювати не можна — у PATCH його просто немає, тому в редагуванні поле лише для читання.
+ * Код полиці змінювати не можна - у PATCH його просто немає, тому в редагуванні поле лише для читання.
  */
 export function ShelfFormModal({
   warehouseId,
@@ -117,7 +117,7 @@ export function ShelfFormModal({
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    // Редагування надсилає лише змінені поля (PATCH), створення — усі
+    // Редагування надсилає лише змінені поля (PATCH), створення - усі
     mutationFn: (data: ShelfInput | ShelfPatch) =>
       isEdit
         ? updateShelf(warehouseId, rackCode, shelf.shelf_id, data as ShelfPatch)
@@ -176,7 +176,7 @@ export function ShelfFormModal({
     const length = parseDecimal(form.length)!;
     const height = parseDecimal(form.height)!;
     const maxWeight = parseDecimal(form.max_weight)!;
-    // validate() вище гарантує: при inactive причина обрана, при active — порожня
+    // validate() вище гарантує: при inactive причина обрана, при active - порожня
     const reason: InactiveReason | null =
       form.status === 'inactive' && form.inactive_reason !== '' ? form.inactive_reason : null;
 
@@ -193,8 +193,8 @@ export function ShelfFormModal({
       return;
     }
 
-    // PATCH — лише змінені поля.
-    // Якщо статус inactive → active, причина потрапляє в changes як null — це критично:
+    // PATCH - лише змінені поля.
+    // Якщо статус inactive → active, причина потрапляє в changes як null - це критично:
     // без неї бекенд побачить стару причину при активному статусі й відхилить запит (422).
     const changes: ShelfPatch = {};
     if (width !== Number(shelf.width)) changes.width = width;
@@ -204,7 +204,7 @@ export function ShelfFormModal({
     if (form.status !== shelf.status) changes.status = form.status;
     if (reason !== shelf.inactive_reason) changes.inactive_reason = reason;
     if (Object.keys(changes).length === 0) {
-      toast.info('Змін немає — нічого зберігати');
+      toast.info('Змін немає - нічого зберігати');
       return;
     }
     mutation.mutate(changes);
@@ -216,7 +216,7 @@ export function ShelfFormModal({
       subtitle={
         isEdit
           ? `Стелаж «${rackCode}» · QR: ${shelf.qr}`
-          : `Стелаж «${rackCode}» — полиця з’явиться у списку після створення`
+          : `Стелаж «${rackCode}» - полиця з’явиться у списку після створення`
       }
       onClose={onClose}
       size="sm"

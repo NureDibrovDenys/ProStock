@@ -10,7 +10,7 @@ type ModalProps = {
   children: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg';
-  /** Чи можна закрити кліком по фону (для процесу, що триває, — false). */
+  /** Чи можна закрити кліком по фону (для процесу, що триває, - false). */
   dismissible?: boolean;
 };
 

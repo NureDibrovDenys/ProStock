@@ -278,7 +278,7 @@ async def delete_inbound_order(
     description=(
         "Приймає товар на склад: розміщує партії на полицях із вільним місцем "
         "і переводить накладну у статус «Завершено». "
-        "Якщо місця не вистачає — 409 із переліком товарів, які не вдалося розмістити."
+        "Якщо місця не вистачає - 409 із переліком товарів, які не вдалося розмістити."
     ),
 )
 async def post_inbound_order(
@@ -305,7 +305,7 @@ async def post_inbound_order(
     except stock_service.InsufficientCapacityError as e:
         raise _shortage_error(
             status.HTTP_409_CONFLICT,
-            "Недостатньо місця на полицях складу — накладну не проведено",
+            "Недостатньо місця на полицях складу - накладну не проведено",
             [shortage.to_dict() for shortage in e.shortages],
         ) from e
 
@@ -446,7 +446,7 @@ async def get_outbound_order(
     summary="Створити вихідну накладну",
     description=(
         "Створює накладну як чернетку. Номер присвоює бекенд. "
-        "Нестача залишків не блокує створення чернетки — вона перевіряється при проведенні."
+        "Нестача залишків не блокує створення чернетки - вона перевіряється при проведенні."
     ),
 )
 async def create_outbound_order(
@@ -551,7 +551,7 @@ async def delete_outbound_order(
     summary="Провести вихідну накладну",
     description=(
         "Списує товар із полиць і переводить накладну у статус «Завершено». "
-        "Якщо залишків недостатньо — 409 із переліком товарів і розривом залишку."
+        "Якщо залишків недостатньо - 409 із переліком товарів і розривом залишку."
     ),
 )
 async def post_outbound_order(
@@ -578,7 +578,7 @@ async def post_outbound_order(
     except stock_service.InsufficientStockError as e:
         raise _shortage_error(
             status.HTTP_409_CONFLICT,
-            "Недостатньо залишків на складі — накладну не проведено",
+            "Недостатньо залишків на складі - накладну не проведено",
             [shortage.to_dict() for shortage in e.shortages],
         ) from e
 
@@ -675,7 +675,7 @@ async def get_stock_levels(
     product_ids: str | None = Query(
         None, description="Список id товарів через кому, наприклад 1,2,3"
     ),
-    warehouse_id: int | None = Query(None, description="Склад; за замовчуванням — усі"),
+    warehouse_id: int | None = Query(None, description="Склад; за замовчуванням - усі"),
     _: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[StockLevelResponse]:

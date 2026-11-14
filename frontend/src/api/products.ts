@@ -10,7 +10,7 @@ import type {
 
 const PRODUCTS = '/products';
 
-/** GET /api/v1/products — сторінка каталогу з пошуком, фільтрами та сортуванням. */
+/** GET /api/v1/products - сторінка каталогу з пошуком, фільтрами та сортуванням. */
 export const getProducts = (query: ProductQuery) =>
   request<ProductList>(PRODUCTS, {
     query: {
@@ -66,7 +66,7 @@ async function parseImportResponse(response: Response): Promise<ImportReport> {
   return (await response.json()) as ImportReport;
 }
 
-/** POST /api/v1/products/import — імпорт CSV/XLSX зі звітом про помилки. */
+/** POST /api/v1/products/import - імпорт CSV/XLSX зі звітом про помилки. */
 export async function importProducts(file: File): Promise<ImportReport> {
   let response = await uploadFile(file);
   if (response.status === 401) {
@@ -77,7 +77,7 @@ export async function importProducts(file: File): Promise<ImportReport> {
   return parseImportResponse(response);
 }
 
-/** GET /api/v1/products/export — завантаження CSV або Excel. */
+/** GET /api/v1/products/export - завантаження CSV або Excel. */
 export const exportProducts = (format: 'csv' | 'xlsx', query: ProductQuery) =>
   downloadFile(`${PRODUCTS}/export`, {
     query: {
@@ -91,7 +91,7 @@ export const exportProducts = (format: 'csv' | 'xlsx', query: ProductQuery) =>
     fallbackFilename: `products.${format}`,
   });
 
-/** GET /api/v1/products/import/template — шаблон для заповнення. */
+/** GET /api/v1/products/import/template - шаблон для заповнення. */
 export const downloadImportTemplate = (format: 'csv' | 'xlsx') =>
   downloadFile(`${PRODUCTS}/import/template`, {
     query: { format },

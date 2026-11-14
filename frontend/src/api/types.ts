@@ -1,6 +1,6 @@
 // Контракт даних між веб-панеллю та бекендом.
 // Імена полів і значення enum узгоджені з backend/app/*/models.py та backend/app/core/enums.py.
-// Повний опис ендпоінтів — у frontend/API.md.
+// Повний опис ендпоінтів - у frontend/API.md.
 
 // ── Enum-и (backend/app/core/enums.py) ─────────────────────────────────────
 
@@ -21,7 +21,7 @@ export interface Warehouse {
   total_warehouse_area: number;
 }
 
-/** Тіло POST / PATCH /warehouses — бекенд приймає інші імена полів, ніж віддає. */
+/** Тіло POST / PATCH /warehouses - бекенд приймає інші імена полів, ніж віддає. */
 export interface WarehouseInput {
   name: string;
   address: string | null;
@@ -30,12 +30,12 @@ export interface WarehouseInput {
 }
 
 // ── Мапа складу ───────────────────────────────────────────────────────────
-// Усі координати й розміри — у метрах. coord_x / coord_y — центр об'єкта.
-// length — розмір уздовж власної осі X об'єкта (до повороту), width — уздовж осі Y.
-// rotation_angle — поворот у градусах за годинниковою стрілкою.
+// Усі координати й розміри - у метрах. coord_x / coord_y - центр об'єкта.
+// length - розмір уздовж власної осі X об'єкта (до повороту), width - уздовж осі Y.
+// rotation_angle - поворот у градусах за годинниковою стрілкою.
 
 /**
- * Вершина контуру приміщення (WarehouseWall). Вершини — по внутрішній грані стіни,
+ * Вершина контуру приміщення (WarehouseWall). Вершини - по внутрішній грані стіни,
  * полігон простий (без самоперетинів), знакова площа за vertex_order додатна.
  */
 export interface WallVertex {
@@ -45,8 +45,8 @@ export interface WallVertex {
 }
 
 /**
- * Внутрішня перегородка (WarehousePartition) — відрізок по осьовій лінії стіни.
- * height: null — до стелі.
+ * Внутрішня перегородка (WarehousePartition) - відрізок по осьовій лінії стіни.
+ * height: null - до стелі.
  */
 export interface MapPartition {
   partition_id?: number;
@@ -145,7 +145,7 @@ export interface RackDetails {
 }
 
 /**
- * Повні дані полиці — GET /api/v1/warehouses/{id}/racks/{code}/shelves[/{shelf_id}]
+ * Повні дані полиці - GET /api/v1/warehouses/{id}/racks/{code}/shelves[/{shelf_id}]
  * (backend: ShelfResponse).
  */
 export interface Shelf {
@@ -177,8 +177,8 @@ export interface Shelf {
 }
 
 /**
- * Тіло POST .../shelves — створення полиці (backend: ShelfCreate).
- * Статус «occupied» вручну встановити не можна — його визначають складські операції.
+ * Тіло POST .../shelves - створення полиці (backend: ShelfCreate).
+ * Статус «occupied» вручну встановити не можна - його визначають складські операції.
  */
 export interface ShelfInput {
   /** Код полиці, унікальний у стелажі (макс. 50 символів). Зміна коду PATCH-ем не передбачена. */
@@ -192,7 +192,7 @@ export interface ShelfInput {
   inactive_reason: InactiveReason | null;
 }
 
-/** Тіло PATCH .../shelves/{shelf_id} — лише змінені поля (backend: ShelfUpdate, без code). */
+/** Тіло PATCH .../shelves/{shelf_id} - лише змінені поля (backend: ShelfUpdate, без code). */
 export type ShelfPatch = Partial<Omit<ShelfInput, 'code'>>;
 
 // ── Дашборд ───────────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ export interface User {
   role: RoleName;
   status: UserStatus;
   warehouse_id: number | null;
-  /** Посада для відображення ("Водій навантажувача"). null — показується назва ролі. */
+  /** Посада для відображення ("Водій навантажувача"). null - показується назва ролі. */
   position: string | null;
   on_shift: boolean;
   created_at: string;
@@ -342,7 +342,7 @@ export interface ImportReport {
 export type CounterpartyKind = 'suppliers' | 'recipients';
 export type CounterpartyStatus = 'active' | 'inactive' | 'blocked';
 
-/** Постачальник або одержувач — поля спільні (моделі Supplier і Recipient). */
+/** Постачальник або одержувач - поля спільні (моделі Supplier і Recipient). */
 export interface Counterparty {
   id: number;
   company_name: string;
@@ -351,7 +351,7 @@ export interface Counterparty {
   contact_person: string | null;
   phone_number: string | null;
   email: string | null;
-  /** Для одержувача — адреса доставки (обов'язкова). */
+  /** Для одержувача - адреса доставки (обов'язкова). */
   address: string | null;
   status: CounterpartyStatus;
 }
@@ -401,7 +401,7 @@ export interface InboundOrderPayload {
 }
 
 /**
- * Вихідна накладна (модель OutboundOrder). API ще немає — контракт запропонований фронтендом:
+ * Вихідна накладна (модель OutboundOrder). API ще немає - контракт запропонований фронтендом:
  * поля як у прихідній, але одержувач замість постачальника, а invoice_number присвоює бекенд.
  */
 export interface OutboundOrder {
@@ -417,7 +417,7 @@ export interface OutboundOrder {
   items: OutboundOrderItem[];
 }
 
-/** Рядок вихідної накладної — та сама форма, що й у прихідної. */
+/** Рядок вихідної накладної - та сама форма, що й у прихідної. */
 export type OutboundOrderItem = InboundOrderItem;
 export type OutboundOrderItemPayload = InboundOrderItemPayload;
 
@@ -525,7 +525,7 @@ export interface AuthUser {
   last_name: string;
   role: RoleName | 'guest';
   status: UserStatus;
-  /** ID складу, до якого прив'язаний обліковий запис. null — не прив'язаний (адміністратор). */
+  /** ID складу, до якого прив'язаний обліковий запис. null - не прив'язаний (адміністратор). */
   warehouse_id: number | null;
   permissions: Record<Permission, boolean>;
 }

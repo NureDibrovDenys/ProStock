@@ -36,7 +36,7 @@ function validate(form: FormState): Errors {
 
 /**
  * Створення (warehouse не передано) або редагування складу.
- * onSaved отримує збережений склад — напр., щоб одразу зробити новий склад поточним.
+ * onSaved отримує збережений склад - напр., щоб одразу зробити новий склад поточним.
  */
 export function WarehouseFormModal({
   warehouse,
@@ -57,7 +57,7 @@ export function WarehouseFormModal({
   const [errors, setErrors] = useState<Errors>({});
 
   const mutation = useMutation({
-    // Редагування надсилає лише змінені поля (PATCH), створення — усі
+    // Редагування надсилає лише змінені поля (PATCH), створення - усі
     mutationFn: (data: Partial<WarehouseInput>) =>
       isEdit ? updateWarehouse(warehouse.warehouse_id, data) : createWarehouse(data as WarehouseInput),
     onSuccess: (saved) => {
@@ -111,13 +111,13 @@ export function WarehouseFormModal({
     };
     if (!isEdit) return mutation.mutate(data);
 
-    // PATCH — лише змінені поля
+    // PATCH - лише змінені поля
     const changes: Partial<WarehouseInput> = {};
     if (data.name !== warehouse.warehouse_name) changes.name = data.name;
     if (data.address !== (warehouse.warehouse_address ?? null)) changes.address = data.address;
     if (data.total_area !== Number(warehouse.total_warehouse_area)) changes.total_area = data.total_area;
     if (Object.keys(changes).length === 0) {
-      toast.info('Змін немає — нічого зберігати');
+      toast.info('Змін немає - нічого зберігати');
       return;
     }
     mutation.mutate(changes);

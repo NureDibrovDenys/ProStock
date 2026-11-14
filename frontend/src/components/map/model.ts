@@ -25,7 +25,7 @@ export interface ShapeObject {
   w: number;
   h: number;
   a: number;
-  /** id запису на бекенді — щоб при збереженні оновити, а не створити заново. */
+  /** id запису на бекенді - щоб при збереженні оновити, а не створити заново. */
   serverId?: number;
   shelves?: number;
   cap?: number | null;
@@ -48,7 +48,7 @@ export interface PartitionObject {
   start: Point;
   end: Point;
   thickness: number;
-  /** null — до стелі. */
+  /** null - до стелі. */
   height: number | null;
 }
 
@@ -101,7 +101,7 @@ export const POINT_TYPES: Array<{ value: PointType; label: string }> = [
   { value: 'outbound', label: 'Точка відвантаження' },
 ];
 
-/** Пресети стелажів: w — довжина, h — глибина (м), s — кількість полиць. */
+/** Пресети стелажів: w - довжина, h - глибина (м), s - кількість полиць. */
 export const RACK_PRESETS = [
   { n: 'Полицевий легкий', w: 2, h: 0.6, s: 5 },
   { n: 'Фронтальний палетний', w: 2.7, h: 1.1, s: 3 },
@@ -250,7 +250,7 @@ export function toApi(objs: MapObject[]): WarehouseMap {
 /**
  * Конфлікти (попередження, зберегти можна): стелажі, що перетинаються з іншими стелажами,
  * перешкодами чи перегородками або виходять за контур; перегородки за межами контуру.
- * Перешкоди на перегородках конфліктом не є — колона в стіні це норма.
+ * Перешкоди на перегородках конфліктом не є - колона в стіні це норма.
  */
 export function findConflicts(objs: MapObject[]): Set<string> {
   const bad = new Set<string>();

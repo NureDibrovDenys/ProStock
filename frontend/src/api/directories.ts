@@ -52,7 +52,7 @@ export const getCounterparty = async (kind: CounterpartyKind, id: number) =>
 export const createCounterparty = async (kind: CounterpartyKind, data: CounterpartyInput) =>
   fromApi(await request<ApiCounterparty>(`/${kind}`, { method: 'POST', body: data }));
 
-/** PATCH /api/v1/{suppliers|recipients}/{id} — лише змінені поля. */
+/** PATCH /api/v1/{suppliers|recipients}/{id} - лише змінені поля. */
 export const updateCounterparty = async (kind: CounterpartyKind, id: number, data: Partial<CounterpartyInput>) =>
   fromApi(await request<ApiCounterparty>(`/${kind}/${id}`, { method: 'PATCH', body: data }));
 

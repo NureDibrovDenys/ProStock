@@ -374,7 +374,7 @@ async def remove_outgoing(
                 stock_item.quantity = new_quantity
             remaining -= take
 
-        if remaining > 0:  # pragma: no cover — перевірка вище мала б відловити це раніше
+        if remaining > 0:  # pragma: no cover - перевірка вище мала б відловити це раніше
             raise InsufficientStockError(
                 [
                     Shortage(

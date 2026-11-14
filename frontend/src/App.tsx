@@ -23,7 +23,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={AUTH_ENABLED ? <LoginPage /> : <Navigate to="/" replace />} />
       <Route element={<RequireAuth />}>
-        {/* Редактор мапи — повноекранний, без навбару (як у макеті) */}
+        {/* Редактор мапи - повноекранний, без навбару (як у макеті) */}
         <Route
           path="/warehouse/edit"
           element={

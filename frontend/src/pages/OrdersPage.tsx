@@ -147,7 +147,7 @@ export function OrdersPage() {
             </span>
             <h2 className={styles.emptyTitle}>Накладних не знайдено</h2>
             <p className={styles.emptyText}>
-              Змініть фільтри або створіть накладну: прихідну — щоб прийняти товар на склад, вихідну — щоб
+              Змініть фільтри або створіть накладну: прихідну - щоб прийняти товар на склад, вихідну - щоб
               відвантажити його одержувачу.
             </p>
             <div className={styles.emptyActions}>{createButtons}</div>

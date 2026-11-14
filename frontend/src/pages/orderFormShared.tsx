@@ -18,7 +18,7 @@ export function validQuantity(value: string): number | null {
   return quantity > 0 ? quantity : null;
 }
 
-// ── Дати: бекенд зберігає timestamptz, у формі — локальна дата yyyy-mm-dd ──
+// ── Дати: бекенд зберігає timestamptz, у формі - локальна дата yyyy-mm-dd ──
 
 const pad = (n: number) => String(n).padStart(2, '0');
 export const toDateInput = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;

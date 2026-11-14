@@ -123,7 +123,7 @@ class ShelfInfoResponse(BaseModel):
 
     shelf_id: int
     shelf_code: str
-    product_name: str | None  # завжди null — товари ще не реалізовані
+    product_name: str | None  # завжди null - товари ще не реалізовані
     occupied: int             # 1 if is_occupied else 0
     capacity: int             # завжди 1
     shelf_status: str

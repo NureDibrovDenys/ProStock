@@ -37,7 +37,7 @@ type SortState = { by: ProductSortField; order: 'asc' | 'desc' };
 const numberFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 3 });
 
 function formatNumber(value: string | null): string {
-  if (value === null || value === '') return '—';
+  if (value === null || value === '') return '-';
   const parsed = Number(value);
   return Number.isFinite(parsed) ? numberFormat.format(parsed) : value;
 }
@@ -369,14 +369,14 @@ export function ProductsPage() {
                     </td>
                     <td className={styles.name}>{product.name}</td>
                     <td>
-                      <span className={styles.category}>{product.category_name ?? '—'}</span>
+                      <span className={styles.category}>{product.category_name ?? '-'}</span>
                     </td>
                     <td>{UNIT_LABELS[product.unit_of_measure] ?? product.unit_of_measure}</td>
                     <td className={styles.numeric}>{formatDimensions(product)}</td>
                     <td className={styles.numeric}>{formatNumber(product.weight)}</td>
                     <td className={styles.numeric}>
                       {product.min_stock_level === null ? (
-                        <span className={styles.muted}>—</span>
+                        <span className={styles.muted}>-</span>
                       ) : (
                         <span className={styles.minStock}>{formatNumber(product.min_stock_level)}</span>
                       )}

@@ -39,7 +39,7 @@ const ROLE_HINTS: Partial<Record<RoleName, string>> = {
 /** Адміністратор не прив'язується до складу; комірник без складу працювати не може (бекенд відхилить). */
 const roleUsesWarehouse = (role: RoleName) => role !== 'administrator' && role !== 'root';
 
-/** passwordOptional — під час редагування порожній пароль означає «не змінювати». */
+/** passwordOptional - під час редагування порожній пароль означає «не змінювати». */
 function validate(form: FormState, { passwordOptional = false, chooseWarehouse = false } = {}): Errors {
   const errors: Errors = {};
   if (chooseWarehouse && form.role === 'storekeeper' && form.warehouse_id === null) {
@@ -83,7 +83,7 @@ const emptyForm = (warehouseId: number | null): FormState => ({
 /**
  * Створення облікового запису.
  * • Адміністратор: будь-яка роль і будь-який склад (POST /users).
- * • Менеджер складу: лише комірник, склад — власний, без вибору (POST /managers/storekeepers).
+ * • Менеджер складу: лише комірник, склад - власний, без вибору (POST /managers/storekeepers).
  * • Редагування комірника менеджером (/employees/:userId/edit): ім'я, прізвище, пошта, пароль
  *   (PATCH /managers/storekeepers/{id}); роль і склад не змінюються.
  */
@@ -107,7 +107,7 @@ export function NewEmployeePage() {
   const [form, setForm] = useState<FormState>(() => emptyForm(defaultWarehouseId));
   const [errors, setErrors] = useState<Errors>({});
 
-  // Адміністратор: за замовчуванням — поточний склад із перемикача (список складів може прийти пізніше)
+  // Адміністратор: за замовчуванням - поточний склад із перемикача (список складів може прийти пізніше)
   const warehouseTouched = useRef(false);
   useEffect(() => {
     if (!isManagerMode && !warehouseTouched.current && defaultWarehouseId !== null) {
@@ -129,7 +129,7 @@ export function NewEmployeePage() {
   });
   const original = storekeeperQuery.data;
 
-  // Заповнюємо форму даними комірника один раз — повторні запити не мають затирати введене
+  // Заповнюємо форму даними комірника один раз - повторні запити не мають затирати введене
   const prefilledFor = useRef<number | null>(null);
   useEffect(() => {
     if (original && prefilledFor.current !== original.user_id) {
@@ -206,13 +206,13 @@ export function NewEmployeePage() {
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
     if (isEdit && Object.keys(changesFrom(form)).length === 0) {
-      toast.info('Змін немає — нічого зберігати');
+      toast.info('Змін немає - нічого зберігати');
       return;
     }
     mutation.mutate(form);
   };
 
-  // Загальна помилка під формою — для всього, що не прив'язано до конкретного поля
+  // Загальна помилка під формою - для всього, що не прив'язано до конкретного поля
   const serverError = (() => {
     if (!mutation.isError) return null;
     const error = mutation.error;
@@ -321,7 +321,7 @@ export function NewEmployeePage() {
             disabled
             error={
               managerWithoutWarehouse
-                ? 'Вам ще не призначено склад — створювати комірників неможливо. Зверніться до адміністратора.'
+                ? 'Вам ще не призначено склад - створювати комірників неможливо. Зверніться до адміністратора.'
                 : undefined
             }
             hint="Комірник отримає доступ лише до вашого складу"
@@ -349,7 +349,7 @@ export function NewEmployeePage() {
               + Новий склад
             </button>
             {warehousesQuery.data?.length === 0 && (
-              <p className={styles.warehouseHint}>Складів ще немає — створіть перший, щоб призначити на нього співробітника.</p>
+              <p className={styles.warehouseHint}>Складів ще немає - створіть перший, щоб призначити на нього співробітника.</p>
             )}
           </div>
         ) : (

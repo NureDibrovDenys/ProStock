@@ -23,7 +23,7 @@ export function EmployeesPage() {
 
   /**
    * Фільтр за складом іде за перемикачем поточного складу в навбарі: вибір складу тут теж
-   * перемикає поточний. «Усі склади» — окремий режим, що не змінює поточний склад.
+   * перемикає поточний. «Усі склади» - окремий режим, що не змінює поточний склад.
    */
   const currentWarehouseId = useCurrentWarehouse();
   const [showAllWarehouses, setShowAllWarehouses] = useState(false);
@@ -117,7 +117,7 @@ export function EmployeesPage() {
           <section className={styles.all}>
             <h2 className={styles.allTitle}>Усі співробітники</h2>
             {users.length === 0 ? (
-              <p className={styles.muted}>{warehouseFilter === '' ? 'Співробітників ще немає — додайте першого.' : 'На цьому складі немає співробітників.'}</p>
+              <p className={styles.muted}>{warehouseFilter === '' ? 'Співробітників ще немає - додайте першого.' : 'На цьому складі немає співробітників.'}</p>
             ) : (
               <ul className={styles.rows}>
                 {users.map((u) => (

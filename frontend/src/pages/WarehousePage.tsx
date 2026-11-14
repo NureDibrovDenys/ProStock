@@ -102,7 +102,7 @@ if (warehouseId === null) {
     <>
       <PageHeader
         title={`Склад ${warehouseName}`}
-        subtitle="Наведіть на стелаж — побачите його заповненість. Клік по стелажу відкриває його полиці."
+        subtitle="Наведіть на стелаж - побачите його заповненість. Клік по стелажу відкриває його полиці."
         actions={
           can('warehouse_map_write') && (
             <Button variant="secondary" to="/warehouse/edit">
@@ -173,8 +173,8 @@ if (warehouseId === null) {
               {fills[legendRack.name] !== undefined
                 ? `заповнений на ${fills[legendRack.name]}%`
                 : racksQuery.isError
-                  ? '— дані про заповнення недоступні'
-                  : '— немає даних про заповнення'}
+                  ? '- дані про заповнення недоступні'
+                  : '- немає даних про заповнення'}
             </p>
           )}
         </aside>

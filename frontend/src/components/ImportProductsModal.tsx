@@ -61,7 +61,7 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
       return;
     }
     if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
-      setError(`Файл завеликий — максимум ${MAX_SIZE_MB} МБ`);
+      setError(`Файл завеликий - максимум ${MAX_SIZE_MB} МБ`);
       return;
     }
     if (candidate.size === 0) {
@@ -160,7 +160,7 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
       subtitle={
         report
           ? `Файл ${report.filename}`
-          : 'Завантажте CSV або Excel з товарами — коректні рядки буде збережено'
+          : 'Завантажте CSV або Excel з товарами - коректні рядки буде збережено'
       }
       onClose={close}
       size="lg"
@@ -279,8 +279,8 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
             <p className={styles.rulesTitle}>Як працює імпорт</p>
             <ul>
               <li>Обовʼязкові колонки: sku_code, name, unit_of_measure, width, length, height, weight.</li>
-              <li>Категорію вкажіть назвою — нова створиться автоматично.</li>
-              <li>Товари з наявним артикулом оновлюються, нові — створюються.</li>
+              <li>Категорію вкажіть назвою - нова створиться автоматично.</li>
+              <li>Товари з наявним артикулом оновлюються, нові - створюються.</li>
               <li>Рядки з помилками не зберігаються й потрапляють у звіт.</li>
             </ul>
           </div>
@@ -330,7 +330,7 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
                 <div>
                   <h3 className={styles.errorTitle}>Рядки з помилками</h3>
                   <p className={styles.errorSubtitle}>
-                    Виправте їх у файлі й повторіть імпорт — решта товарів уже збережена.
+                    Виправте їх у файлі й повторіть імпорт - решта товарів уже збережена.
                   </p>
                 </div>
                 <Button variant="secondary" onClick={() => downloadErrorReport(report)}>
@@ -352,8 +352,8 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
                     {report.errors.slice(0, MAX_VISIBLE_ERRORS).map((item, index) => (
                       <tr key={`${item.row}-${item.field}-${index}`}>
                         <td className={styles.rowNumber}>{item.row}</td>
-                        <td>{item.sku_code || '—'}</td>
-                        <td>{item.field || '—'}</td>
+                        <td>{item.sku_code || '-'}</td>
+                        <td>{item.field || '-'}</td>
                         <td>{item.message}</td>
                       </tr>
                     ))}
@@ -363,7 +363,7 @@ export function ImportProductsModal({ onClose, onImported }: ImportProductsModal
 
               {hiddenErrors > 0 && (
                 <p className={styles.note}>
-                  Показано перші {MAX_VISIBLE_ERRORS} помилок, ще {hiddenErrors} — лише у звіті CSV.
+                  Показано перші {MAX_VISIBLE_ERRORS} помилок, ще {hiddenErrors} - лише у звіті CSV.
                 </p>
               )}
             </>
