@@ -8,14 +8,14 @@ import { CurrentWarehouseSelect } from './CurrentWarehouseSelect';
 import styles from './NavBar.module.css';
 
 /**
- * Вкладка видима, якщо є хоча б одне з прав (null — для всіх).
- * adminOnly — лише root / administrator (окремого права на склади бекенд не віддає).
+ * Вкладка видима, якщо є хоча б одне з прав (null - для всіх).
+ * adminOnly - лише root / administrator (окремого права на склади бекенд не віддає).
  */
 type Tab = { to: string; label: string; end: boolean; permission: Permission[] | null; adminOnly?: boolean };
 
 const TABS: Tab[] = [
   { to: '/products', label: 'Товари', end: false, permission: ['products_read'] },
-  // Адміністратор бачить усіх співробітників, менеджер складу — комірників свого складу
+  // Адміністратор бачить усіх співробітників, менеджер складу - комірників свого складу
   { to: '/employees', label: 'Співробітники', end: false, permission: ['users_manage', 'storekeepers_manage'] },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
   { to: '/warehouses', label: 'Склади', end: true, permission: null, adminOnly: true },

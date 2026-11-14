@@ -251,5 +251,5 @@ async def delete_outbound_order(
     except IntegrityError as e:
         await session.rollback()
         raise OutboundOrderCannotBeDeletedError(
-            "Накладну не можна видалити — існують повʼязані записи"
+            "Накладну не можна видалити - існують повʼязані записи"
         ) from e

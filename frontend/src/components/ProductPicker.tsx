@@ -14,7 +14,7 @@ type Props = {
   onChange: (product: Product | null) => void;
   invalid?: boolean;
   disabled?: boolean;
-  /** Товари, які не можна обрати (вже є в інших рядках) — показуються неактивними з поясненням. */
+  /** Товари, які не можна обрати (вже є в інших рядках) - показуються неактивними з поясненням. */
   isTaken?: (product: Product) => boolean;
   takenLabel?: string;
   'aria-label'?: string;

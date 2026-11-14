@@ -77,7 +77,7 @@ function DirectoryList({ kind }: { kind: CounterpartyKind }) {
         <section className={styles.list}>
           <h2 className={styles.listTitle}>{labels.listTitle}</h2>
           {items.length === 0 ? (
-            <p className={styles.muted}>Довідник порожній — додайте першого {labels.accusative}.</p>
+            <p className={styles.muted}>Довідник порожній - додайте першого {labels.accusative}.</p>
           ) : (
             <ul className={styles.rows}>
               {items.map((item) => (
@@ -91,7 +91,7 @@ function DirectoryList({ kind }: { kind: CounterpartyKind }) {
                       {[item.contact_person, item.phone_number].filter(Boolean).join(' · ') || 'Контакти не вказані'}
                     </p>
                   </div>
-                  <p className={styles.address}>{item.address ?? '—'}</p>
+                  <p className={styles.address}>{item.address ?? '-'}</p>
                   <div className={styles.actions}>
                     <button
                       type="button"

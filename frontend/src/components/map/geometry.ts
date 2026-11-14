@@ -29,7 +29,7 @@ export interface OrientedRect {
 
 export const SNAP_STEP = 0.5;
 export const snap = (v: number) => Math.round(v / SNAP_STEP) * SNAP_STEP;
-/** Дрібний крок (1 см) — для перегородок, що ставляться без сітки. */
+/** Дрібний крок (1 см) - для перегородок, що ставляться без сітки. */
 export const FINE_STEP = 0.01;
 export const snapFine = (v: number) => Math.round(v * 100) / 100;
 
@@ -133,7 +133,7 @@ export function movePolygonEdge(points: Point[], edgeIndex: number, distance: nu
   );
 }
 
-/** Відрізки перетинаються «навхрест» — дотик кінцем або накладання не рахуються. */
+/** Відрізки перетинаються «навхрест» - дотик кінцем або накладання не рахуються. */
 export function segmentsCross(p1: Point, p2: Point, q1: Point, q2: Point): boolean {
   const d1 = sign(cross(q1, q2, p1));
   const d2 = sign(cross(q1, q2, p2));
@@ -206,7 +206,7 @@ export function pointOnPolygonEdge(pt: Point, poly: Point[], tol = 1e-6): boolea
 /**
  * Опуклий многокутник (повернутий прямокутник) повністю всередині полігона приміщення.
  * Вершини на самій стіні допустимі (стелаж впритул до стіни). Окрім вершин перевіряємо
- * ребра — інакше в непрямокутному приміщенні стелаж «прорізає» внутрішній кут стіни.
+ * ребра - інакше в непрямокутному приміщенні стелаж «прорізає» внутрішній кут стіни.
  */
 export function rectInsidePolygon(rect: Point[], poly: Point[]): boolean {
   const inside = rect.every((p) => pointInPolygon(p, poly) || pointOnPolygonEdge(p, poly));
@@ -220,7 +220,7 @@ export function rectInsidePolygon(rect: Point[], poly: Point[]): boolean {
 /**
  * Відрізок усередині полігона: кінці всередині або на стіні, і жодна стіна його не перетинає.
  * Кінець, прив'язаний до стіни, після округлення до сантиметра може опинитися на волосину
- * зовні — тому для перевірки перетину кінці трохи стягуються всередину відрізка.
+ * зовні - тому для перевірки перетину кінці трохи стягуються всередину відрізка.
  */
 export function segmentInsidePolygon(a: Point, b: Point, poly: Point[], tol = 0.01): boolean {
   const ok = (p: Point) => pointInPolygon(p, poly) || pointOnPolygonEdge(p, poly, tol);
@@ -257,7 +257,7 @@ export function distToSegment(p: Point, a: Point, b: Point): number {
   return dist(p, closestPointOnSegment(p, a, b));
 }
 
-/** Напрямок from → to прив'язується до кута, кратного stepDeg, довжина — до кроку сітки (або lenStep). */
+/** Напрямок from → to прив'язується до кута, кратного stepDeg, довжина - до кроку сітки (або lenStep). */
 export function snapAngle(from: Point, to: Point, stepDeg: number, lenStep = SNAP_STEP): Point {
   const step = (stepDeg * Math.PI) / 180;
   const angle = Math.round(Math.atan2(to[1] - from[1], to[0] - from[0]) / step) * step;
@@ -282,7 +282,7 @@ export interface EdgeAngle {
   side: 1 | -1;
 }
 
-/** Кут між відрізком from → to і стіною, на якій лежить from; null — якщо from не на жодній стіні. */
+/** Кут між відрізком from → to і стіною, на якій лежить from; null - якщо from не на жодній стіні. */
 export function angleToEdge(from: Point, to: Point, edges: Array<[Point, Point]>, tol = 0.02): EdgeAngle | null {
   const v: Point = [to[0] - from[0], to[1] - from[1]];
   if (Math.hypot(v[0], v[1]) < EPS) return null;

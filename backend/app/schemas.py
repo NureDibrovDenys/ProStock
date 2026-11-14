@@ -30,7 +30,7 @@ class PartitionSchema(BaseModel):
     end_x: Numeric_MAX_8_2 = Field(..., description="Координата Х кінця")
     end_y: Numeric_MAX_8_2 = Field(..., description="Координата Y кінця")
     thickness: Numeric_MAX_5_2 = Field(Decimal("0.20"), gt=0, description="Товщина перегородки")
-    height: Numeric_MAX_8_2 | None = Field(None, gt=0, description="Висота; null — до стелі")
+    height: Numeric_MAX_8_2 | None = Field(None, gt=0, description="Висота; null - до стелі")
 
     @model_validator(mode = "after")
     def must_have_length(self):
@@ -181,7 +181,7 @@ class UserLoginSchema(BaseModel):
         ...,
         min_length=1,
         max_length=128,
-        description="Пароль (перевірка складності — на етапі створення)",
+        description="Пароль (перевірка складності - на етапі створення)",
     )
 
     @field_validator("email")

@@ -12,7 +12,7 @@ import styles from './WarehousesPage.module.css';
 export function WarehousesPage() {
   const query = useWarehouses();
   const currentId = useCurrentWarehouse();
-  // undefined — форма закрита, null — новий склад, Warehouse — редагування
+  // undefined - форма закрита, null - новий склад, Warehouse - редагування
   const [editing, setEditing] = useState<Warehouse | null | undefined>(undefined);
   const warehouses = query.data ?? [];
 
@@ -36,7 +36,7 @@ export function WarehousesPage() {
           <Building2 size={40} aria-hidden />
           <p className={styles.emptyTitle}>Складів ще немає</p>
           <p className={styles.muted}>
-            Створіть перший склад — після цього можна намалювати його мапу та призначити менеджера.
+            Створіть перший склад - після цього можна намалювати його мапу та призначити менеджера.
           </p>
           <Button onClick={() => setEditing(null)}>+ Створити склад</Button>
         </div>
@@ -88,7 +88,7 @@ export function WarehousesPage() {
         <WarehouseFormModal
           warehouse={editing ?? undefined}
           onClose={() => setEditing(undefined)}
-          // Перший створений склад одразу стає поточним — інакше мапа й дашборд лишаться порожніми
+          // Перший створений склад одразу стає поточним - інакше мапа й дашборд лишаться порожніми
           onSaved={(saved) => {
             if (editing === null && warehouses.length === 0) selectWarehouse(saved.warehouse_id);
           }}

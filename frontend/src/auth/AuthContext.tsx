@@ -167,7 +167,7 @@ export function useAuth() {
   return ctx;
 }
 
-/** Причина автоматичного виходу — для повідомлення на сторінці входу. */
+/** Причина автоматичного виходу - для повідомлення на сторінці входу. */
 export function consumeLogoutReason(): string | null {
   try {
     const reason = sessionStorage.getItem(LOGOUT_REASON_KEY);

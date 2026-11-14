@@ -50,7 +50,7 @@ function validate(form: FormState, kind: CounterpartyKind): Errors {
   else if (company.length > MAX.company_name) errors.company_name = 'Назва занадто довга';
 
   if (`${form.first_name.trim()} ${form.last_name.trim()}`.trim().length > MAX.contact_person) {
-    errors.last_name = "Ім'я та прізвище разом — не більше 150 символів";
+    errors.last_name = "Ім'я та прізвище разом - не більше 150 символів";
   }
 
   const email = form.email.trim();
@@ -65,12 +65,12 @@ function validate(form: FormState, kind: CounterpartyKind): Errors {
   }
 
   if (kind === 'recipients' && !form.address.trim()) {
-    errors.address = 'Вкажіть адресу доставки — без неї неможливо відвантажити товар';
+    errors.address = 'Вкажіть адресу доставки - без неї неможливо відвантажити товар';
   }
 
   const taxId = form.tax_id.trim();
   if (taxId && !/^(\d{8}|\d{10})$/.test(taxId)) {
-    errors.tax_id = 'ЄДРПОУ — 8 цифр, ІПН — 10 цифр';
+    errors.tax_id = 'ЄДРПОУ - 8 цифр, ІПН - 10 цифр';
   }
   return errors;
 }
@@ -136,7 +136,7 @@ function CounterpartyForm({ kind, editId }: { kind: CounterpartyKind; editId: nu
   });
   const original = itemQuery.data;
 
-  //Fill out the form once — subsequent requests should not overwrite the entered data
+  //Fill out the form once - subsequent requests should not overwrite the entered data
   const prefilledFor = useRef<number | null>(null);
   useEffect(() => {
     if (original && prefilledFor.current !== original.id) {
@@ -175,7 +175,7 @@ function CounterpartyForm({ kind, editId }: { kind: CounterpartyKind; editId: nu
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
     if (isEdit && original && Object.keys(changesFrom(form, original)).length === 0) {
-      toast.info('Змін немає — нічого зберігати');
+      toast.info('Змін немає - нічого зберігати');
       return;
     }
     mutation.mutate(form);
@@ -271,7 +271,7 @@ function CounterpartyForm({ kind, editId }: { kind: CounterpartyKind; editId: nu
           onChange={update('tax_id')}
           error={errors.tax_id}
           maxLength={MAX.tax_id}
-          hint="ЄДРПОУ — 8 цифр, ІПН — 10 цифр"
+          hint="ЄДРПОУ - 8 цифр, ІПН - 10 цифр"
         />
 
         {serverError && (

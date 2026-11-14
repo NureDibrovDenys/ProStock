@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     try:
         async with async_session_maker() as session:
             await bootstrap(session)
-    except Exception:  # noqa: BLE001 — не валимо API, якщо БД тимчасово недоступна
+    except Exception:  # noqa: BLE001 - не валимо API, якщо БД тимчасово недоступна
         logger.exception("Не вдалося виконати bootstrap бази даних")
     yield
 

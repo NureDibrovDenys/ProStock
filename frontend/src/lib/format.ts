@@ -20,7 +20,7 @@ export function formatRelativeDay(iso: string): string {
   return new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
-/** Час операції в стрічці: "09:42" для сьогоднішніх, "Вчора", далі — дата. */
+/** Час операції в стрічці: "09:42" для сьогоднішніх, "Вчора", далі - дата. */
 export function formatOperationTime(iso: string): string {
   const date = new Date(iso);
   const yesterday = new Date();

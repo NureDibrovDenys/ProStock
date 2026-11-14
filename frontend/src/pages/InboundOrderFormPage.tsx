@@ -103,7 +103,7 @@ function validateLines(lines: Line[]): Pick<Errors, 'items' | 'lines'> {
     if (seen.has(id)) {
       result.lines[line.key] = {
         ...result.lines[line.key],
-        product: `Уже є в накладній з пакуванням «${PACKAGE_LABELS[line.packageType]}» — збільште кількість у тому рядку`,
+        product: `Уже є в накладній з пакуванням «${PACKAGE_LABELS[line.packageType]}» - збільште кількість у тому рядку`,
       };
     }
     seen.add(id);
@@ -254,7 +254,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
       if (error.status === 400 && /invoice number/i.test(error.message)) {
         setErrors((prev) => ({ ...prev, invoiceNumber: 'Накладна з таким номером документа вже існує' }));
       } else if (error.status === 404 && /supplier/i.test(error.message)) {
-        setErrors((prev) => ({ ...prev, supplier: 'Постачальника немає в базі — оберіть іншого' }));
+        setErrors((prev) => ({ ...prev, supplier: 'Постачальника немає в базі - оберіть іншого' }));
       }
     },
   });
@@ -423,7 +423,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
       )}
       {readOnly && (
         <p className={styles.info}>
-          Накладна вже в статусі «{ORDER_STATUS_LABELS[status]}» — редагувати можна лише чернетки.
+          Накладна вже в статусі «{ORDER_STATUS_LABELS[status]}» - редагувати можна лише чернетки.
         </p>
       )}
 
@@ -541,7 +541,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                   product:
                     errors.lines[line.key]?.product ??
                     (duplicateKeys.has(line.key)
-                      ? `Уже є в накладній з пакуванням «${PACKAGE_LABELS[line.packageType]}» — збільште кількість у тому рядку`
+                      ? `Уже є в накладній з пакуванням «${PACKAGE_LABELS[line.packageType]}» - збільште кількість у тому рядку`
                       : undefined),
                 };
                 const t = lineTotals(line);
@@ -576,7 +576,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                       <span className={cx(styles.readout, styles.small)} title="Одиниця виміру товару з каталогу">
                         {line.product
                           ? (UNIT_LABELS[line.product.unit_of_measure] ?? line.product.unit_of_measure)
-                          : '—'}
+                          : '-'}
                       </span>
                     </div>
                     <div className={styles.cell} role="cell" data-label="Пакування">
@@ -597,12 +597,12 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                     </div>
                     <div className={styles.cell} role="cell" data-label="Об'єм, м³">
                       <span className={cx(styles.readout, styles.small)}>
-                        {t ? volumeFormat.format(t.volume) : '—'}
+                        {t ? volumeFormat.format(t.volume) : '-'}
                       </span>
                     </div>
                     <div className={styles.cell} role="cell" data-label="Вага, кг">
                       <span className={cx(styles.readout, styles.small)}>
-                        {t ? weightFormat.format(t.weight) : '—'}
+                        {t ? weightFormat.format(t.weight) : '-'}
                       </span>
                     </div>
                     <div className={styles.cell} role="cell">
@@ -748,7 +748,7 @@ function CapacityPanel({ capacity, required }: { capacity: Capacity; required: n
       <div className={cx(styles.notice, styles.noticeWarn)}>
         <AlertTriangle size={15} aria-hidden />
         <p>
-          Дефіцит місця — {percent(required_m3 - free_m3)}% від загальної місткості. Проведення накладної заблоковано,
+          Дефіцит місця - {percent(required_m3 - free_m3)}% від загальної місткості. Проведення накладної заблоковано,
           доки не звільниться місце або не зменшиться кількість.
         </p>
       </div>

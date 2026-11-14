@@ -4,7 +4,7 @@ import { isAdminRole } from '../api/users';
 import { getWarehouses } from '../api/warehouse';
 import { useAuth } from '../auth/AuthContext';
 
-// Адміністратор не прив'язаний до складу — поточний склад він обирає перемикачем у навбарі.
+// Адміністратор не прив'язаний до складу - поточний склад він обирає перемикачем у навбарі.
 // Вибір зберігається в localStorage, щоб пережити перезавантаження й бути спільним для вкладок.
 const STORAGE_KEY = 'prostock.currentWarehouse';
 const listeners = new Set<() => void>();
@@ -51,8 +51,8 @@ export function useWarehouses(enabled = true) {
 
 /**
  * ID поточного складу або null, якщо його немає.
- * • Менеджер і комірник — склад із профілю.
- * • Адміністратор — обраний перемикачем; якщо вибору немає або склад видалено — перший зі списку.
+ * • Менеджер і комірник - склад із профілю.
+ * • Адміністратор - обраний перемикачем; якщо вибору немає або склад видалено - перший зі списку.
  */
 export function useCurrentWarehouse(): number | null {
   const { session } = useAuth();
