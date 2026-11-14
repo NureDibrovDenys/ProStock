@@ -64,10 +64,8 @@ export function WarehousePage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const pressedId = useRef<string | null>(null);
 
-  // Вписати мапу у вікно, коли дані прийшли
   useEffect(() => {
     if (objs.length) vp.fitTo(mapBounds(objs));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [objs]);
 
   const racks = objs.filter((o): o is ShapeObject => o.t === 'rack');
@@ -140,6 +138,7 @@ if (warehouseId === null) {
                   hoveredId={hoveredId}
                   showGrid={false}
                   rackCaption={(r) => (fills[r.name] !== undefined ? `${fills[r.name]}%` : null)}
+                  rackFill={fills}
                 />
               </svg>
 

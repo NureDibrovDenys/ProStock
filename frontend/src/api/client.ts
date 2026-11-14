@@ -1,16 +1,8 @@
-// Базовий HTTP-клієнт для REST API ProStock.
-//
-// Безпека сесії:
-// • access-токен зберігається ЛИШЕ в памʼяті модуля (не в localStorage) —
-//   його не можна викрасти через XSS-скрипт і він зникає після перезавантаження;
-// • refresh-токен живе в httpOnly cookie, недоступній для JS;
-// • після 401 клієнт один раз пробує оновити access-токен і повторює запит.
 
 import type { AuthUser, Session } from './types';
 
 export const API_PREFIX = '/api/v1';
 
-/** Подія: сесію втрачено, потрібен вихід на сторінку входу. */
 export const UNAUTHORIZED_EVENT = 'prostock:unauthorized';
 
 export interface ValidationDetail {
@@ -21,11 +13,14 @@ export interface ValidationDetail {
 export class ApiError extends Error {
   readonly status: number;
   readonly details: ValidationDetail[];
+  
+  readonly shortages: unknown[];
 
-  constructor(status: number, message: string, details: ValidationDetail[] = []) {
+  constructor(status: number, message: string, details: ValidationDetail[] = [], shortages: unknown[] = []) {
     super(message);
     this.status = status;
     this.details = details;
+    this.shortages = shortages;
   }
 }
 
@@ -48,7 +43,6 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
-/** AuthProvider підписується, щоб оновити стан після фонового refresh. */
 export function setSessionListener(listener: ((session: Session) => void) | null) {
   sessionListener = listener;
 }
@@ -57,7 +51,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined | null>;
-  /** false — не додавати Authorization і не намагатися оновити токен (login/refresh). */
+  
   auth?: boolean;
   signal?: AbortSignal;
 };
@@ -81,11 +75,6 @@ function authHeaders(useAuth: boolean): Record<string, string> {
   return headers;
 }
 
-/**
- * Оновлює access-токен за httpOnly refresh-cookie.
- * Повертає нову сесію або null, якщо refresh-токен прострочений/відкликаний.
- * Одночасні виклики обʼєднуються в один запит.
- */
 export async function refreshAccessToken(): Promise<Session | null> {
   if (refreshInFlight) return refreshInFlight;
 
@@ -124,7 +113,6 @@ async function readError(response: Response, method: string, path: string): Prom
   try {
     data = await response.json();
   } catch {
-    // тіло не JSON
   }
 
   const detail = data?.detail;
@@ -145,6 +133,14 @@ async function readError(response: Response, method: string, path: string): Prom
     return new ApiError(404, `Ендпоінт ${method} ${API_PREFIX}${path.split('?')[0]} ще не реалізований`);
   }
   if (typeof detail === 'string') return new ApiError(response.status, detail, details);
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const message = (detail as { message?: unknown }).message;
+    const shortages = (detail as { shortages?: unknown }).shortages;
+    if (typeof message === 'string') {
+      const list = Array.isArray(shortages) ? shortages : [];
+      return new ApiError(response.status, message, details, list);
+    }
+  }
   if (response.status >= 500) {
     return new ApiError(response.status, 'Помилка сервера. Спробуйте пізніше.');
   }
@@ -178,7 +174,6 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError(0, 'Сервер недоступний. Перевірте підключення до мережі.');
   }
 
-  // Access-токен міг прострочитися — пробуємо тихо оновити сесію
   if (response.status === 401 && auth) {
     const session = await refreshAccessToken();
     if (session) {
@@ -200,7 +195,6 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return (await response.json()) as T;
 }
 
-/** Завантажує файл (експорт) з урахуванням авторизації та поновлення токена. */
 export async function downloadFile(
   path: string,
   options: { query?: RequestOptions['query']; fallbackFilename: string },
@@ -233,7 +227,6 @@ export async function downloadFile(
   document.body.appendChild(link);
   link.click();
   link.remove();
-  // Даємо браузеру час почати завантаження
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -245,7 +238,6 @@ function parseFilename(header: string | null): string | null {
   return simple ? simple[1] : null;
 }
 
-/** Завантаження blob-файлу, згенерованого на клієнті (звіт про помилки імпорту). */
 export function downloadBlob(content: BlobPart, filename: string, type = 'text/csv;charset=utf-8') {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);

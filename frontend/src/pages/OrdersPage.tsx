@@ -1,43 +1,61 @@
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, FileText, Search } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCounterparties } from '../api/directories';
-import { ORDER_STATUS_LABELS, getInboundOrders, inboundNumber } from '../api/orders';
-import type { OrderStatus } from '../api/types';
+import { ORDER_STATUS_LABELS, ORDER_TYPE_LABELS, getOrders } from '../api/orders';
+import type { OrderStatus, OrderType } from '../api/types';
 import { Button } from '../components/Button';
 import { ErrorState, LoadingState, PageHeader } from '../components/ui';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { cx } from '../lib/cx';
 import { formatNumber, plural } from '../lib/format';
 import styles from './OrdersPage.module.css';
 
-const FILTERS_SOON = 'Фільтри з’являться разом зі сторінкою списку накладних';
-
 const dateFormat = new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-/** Поточний місяць для фільтра дат, як у макеті: «01.11 – 30.11.2026». */
-function currentMonthLabel(): string {
-  const now = new Date();
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  return `01.${mm} – ${String(last.getDate()).padStart(2, '0')}.${mm}.${now.getFullYear()}`;
-}
+const TYPE_FILTERS: Array<{ value: 'all' | OrderType; label: string }> = [
+  { value: 'all', label: 'Усі' },
+  { value: 'inbound', label: 'Прихідні' },
+  { value: 'outbound', label: 'Вихідні' },
+];
+
+const STATUS_OPTIONS: Array<{ value: 'all' | OrderStatus; label: string }> = [
+  { value: 'all', label: 'Статус: усі' },
+  { value: 'draft', label: 'Статус: чернетка' },
+  { value: 'in_progress', label: 'Статус: в обробці' },
+  { value: 'ready', label: 'Статус: сформовано завдання' },
+  { value: 'completed', label: 'Статус: завершено' },
+  { value: 'canceled', label: 'Статус: скасовано' },
+];
 
 export function StatusPill({ status }: { status: OrderStatus }) {
   return <span className={cx(styles.status, styles[`status-${status}`])}>{ORDER_STATUS_LABELS[status] ?? status}</span>;
 }
 
-/**
- * Список накладних. Поки що робоча лише кнопка «+ Прихідна накладна» і перегляд прихідних;
- * фільтри, пошук і вихідні накладні — наступні задачі.
- */
 export function OrdersPage() {
   const navigate = useNavigate();
-  const ordersQuery = useQuery({ queryKey: ['inbound-orders'], queryFn: () => getInboundOrders({ page_size: 100 }) });
-  const suppliersQuery = useQuery({ queryKey: ['directories', 'suppliers'], queryFn: () => getCounterparties('suppliers') });
+  const [type, setType] = useState<'all' | OrderType>('all');
+  const [status, setStatus] = useState<'all' | OrderStatus>('all');
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
 
-  const orders = ordersQuery.data ?? [];
-  const supplierName = (id: number) =>
-    suppliersQuery.data?.find((supplier) => supplier.id === id)?.company_name ?? `Постачальник №${id}`;
+  const ordersQuery = useQuery({
+    queryKey: ['orders', type, status, debouncedSearch, dateFrom, dateTo],
+    queryFn: () =>
+      getOrders({
+        order_type: type === 'all' ? undefined : type,
+        order_status: status === 'all' ? undefined : status,
+        search: debouncedSearch.trim() || undefined,
+        date_from: dateFrom ? `${dateFrom}T00:00:00` : undefined,
+        date_to: dateTo ? `${dateTo}T23:59:59` : undefined,
+        page_size: 100,
+      }),
+  });
+
+  const orders = ordersQuery.data?.items ?? [];
+  const total = ordersQuery.data?.total ?? 0;
 
   const createButtons = (
     <>
@@ -48,30 +66,73 @@ export function OrdersPage() {
     </>
   );
 
+  const editPath = (orderType: OrderType, orderId: number) =>
+    orderType === 'inbound' ? `/orders/inbound/${orderId}/edit` : `/orders/outbound/${orderId}/edit`;
+
   return (
     <>
       <PageHeader
         title="Накладні"
-        subtitle={ordersQuery.data ? `Усього ${formatNumber(orders.length)}` : undefined}
+        subtitle={ordersQuery.data ? `Усього ${formatNumber(total)}` : undefined}
         actions={createButtons}
       />
 
-      <div className={styles.filters} title={FILTERS_SOON}>
-        <div className={styles.pills}>
-          <span className={cx(styles.pill, styles.pillActive)}>Усі</span>
-          <span className={styles.pill}>Прихідні</span>
-          <span className={styles.pill}>Вихідні</span>
+      <div className={styles.filters}>
+        <div className={styles.pills} role="group" aria-label="Тип накладної">
+          {TYPE_FILTERS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={cx(styles.pill, type === option.value && styles.pillActive)}
+              aria-pressed={type === option.value}
+              onClick={() => setType(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-        <select className={styles.control} disabled aria-label="Статус">
-          <option>Статус: усі</option>
+
+        <select
+          className={styles.control}
+          value={status}
+          aria-label="Статус"
+          onChange={(event) => setStatus(event.target.value as 'all' | OrderStatus)}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
-        <span className={cx(styles.control, styles.dates)} aria-disabled>
+
+        <label className={cx(styles.control, styles.dateInput)}>
           <CalendarDays size={14} aria-hidden />
-          {currentMonthLabel()}
-        </span>
+          <input
+            type="date"
+            value={dateFrom}
+            aria-label="Дата з"
+            onChange={(event) => setDateFrom(event.target.value)}
+          />
+        </label>
+        <label className={cx(styles.control, styles.dateInput)}>
+          <CalendarDays size={14} aria-hidden />
+          <input
+            type="date"
+            value={dateTo}
+            aria-label="Дата по"
+            onChange={(event) => setDateTo(event.target.value)}
+          />
+        </label>
+
         <label className={styles.search}>
           <Search size={14} aria-hidden />
-          <input type="search" placeholder="Пошук за номером або контрагентом" disabled />
+          <input
+            type="search"
+            value={search}
+            placeholder="Пошук за номером або контрагентом"
+            aria-label="Пошук за номером або контрагентом"
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </label>
       </div>
 
@@ -84,32 +145,34 @@ export function OrdersPage() {
             <span className={styles.emptyIcon} aria-hidden>
               <FileText size={26} />
             </span>
-            <h2 className={styles.emptyTitle}>Накладних ще немає</h2>
+            <h2 className={styles.emptyTitle}>Накладних не знайдено</h2>
             <p className={styles.emptyText}>
-              Створіть прихідну накладну, щоб прийняти товар на склад, або вихідну — щоб відвантажити його одержувачу.
+              Змініть фільтри або створіть накладну: прихідну — щоб прийняти товар на склад, вихідну — щоб
+              відвантажити його одержувачу.
             </p>
             <div className={styles.emptyActions}>{createButtons}</div>
           </section>
         ) : (
           <ul className={styles.rows}>
             {orders.map((order) => (
-              <li key={order.inbound_order_id}>
+              <li key={`${order.order_type}-${order.order_id}`}>
                 <button
                   type="button"
                   className={styles.row}
-                  onClick={() => navigate(`/orders/inbound/${order.inbound_order_id}/edit`)}
+                  onClick={() => navigate(editPath(order.order_type, order.order_id))}
                 >
-                  <span className={styles.kind}>Прихідна</span>
+                  <span className={styles.kind}>{ORDER_TYPE_LABELS[order.order_type]}</span>
                   <span className={styles.main}>
-                    <span className={styles.number}>{inboundNumber(order.inbound_order_id)}</span>
+                    <span className={styles.number}>{order.number}</span>
                     <span className={styles.meta}>
-                      {supplierName(order.supplier_id)} · док. {order.invoice_number}
+                      {order.counterparty_name} · док. {order.invoice_number}
                     </span>
                   </span>
                   <span className={styles.date}>
-                    {dateFormat.format(new Date(order.expected_delivery_date))}
+                    {dateFormat.format(new Date(order.date))}
                     <span className={styles.meta}>
-                      {order.items.length} {plural(order.items.length, ['позиція', 'позиції', 'позицій'])}
+                      {order.items_count} {plural(order.items_count, ['позиція', 'позиції', 'позицій'])} ·{' '}
+                      {formatNumber(Number(order.total_quantity))} од.
                     </span>
                   </span>
                   <StatusPill status={order.order_status} />

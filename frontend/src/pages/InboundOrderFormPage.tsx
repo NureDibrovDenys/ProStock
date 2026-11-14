@@ -12,6 +12,7 @@ import {
   createInboundOrder,
   getInboundOrder,
   inboundNumber,
+  postInboundOrder,
   updateInboundOrder,
 } from '../api/orders';
 import { getProduct } from '../api/products';
@@ -28,6 +29,7 @@ import {
 import { Button } from '../components/Button';
 import { ProductPicker } from '../components/ProductPicker';
 import { ErrorState, LoadingState } from '../components/ui';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { cx } from '../lib/cx';
 import { plural } from '../lib/format';
@@ -40,8 +42,6 @@ import {
   quantityToInput,
   toDateInput,
 } from './orderFormShared';
-
-// ── Стан форми ────────────────────────────────────────────────────────────
 
 type Line = {
   key: number;
@@ -65,12 +65,8 @@ type Capacity =
 
 const NO_ERRORS: Errors = { lines: {} };
 const PACKAGES: PackageType[] = ['box', 'pallet'];
-const POST_SOON = 'Проведення накладної — окрема задача беклогу, кнопка запрацює разом з API проведення';
-
 let nextKey = 1;
 const emptyLine = (): Line => ({ key: nextKey++, product: null, quantity: '', packageType: 'box' });
-
-// ── Розрахунок об'єму та ваги з габаритів товару (м, кг) ───────────────────
 
 function lineTotals(line: Line): { volume: number; weight: number } | null {
   if (!line.product || !QUANTITY_PATTERN.test(line.quantity.trim())) return null;
@@ -84,11 +80,8 @@ function lineTotals(line: Line): { volume: number; weight: number } | null {
 }
 
 const volumeFormat = new Intl.NumberFormat('uk-UA', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-// До 2 знаків, щоб легкі товари (миша 0,04 кг × 10) не показувались як «0»
 const weightFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 });
 const percentFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 });
-
-// ── Валідація ─────────────────────────────────────────────────────────────
 
 function validateLines(lines: Line[]): Pick<Errors, 'items' | 'lines'> {
   const result: Pick<Errors, 'items' | 'lines'> = { lines: {} };
@@ -103,7 +96,6 @@ function validateLines(lines: Line[]): Pick<Errors, 'items' | 'lines'> {
     if (errors.product || errors.quantity) result.lines[line.key] = errors;
   }
 
-  // Той самий товар можна додати двічі лише з різним пакуванням (палети + окремі коробки)
   const seen = new Set<string>();
   for (const line of lines) {
     if (!line.product) continue;
@@ -149,9 +141,6 @@ const toItems = (lines: Line[]): InboundOrderItemPayload[] =>
     package_type: line.packageType,
   }));
 
-// ── Сторінка ──────────────────────────────────────────────────────────────
-
-/** Створення (/orders/inbound/new) і редагування (/orders/inbound/:id/edit) прихідної накладної. */
 export function InboundOrderFormPage() {
   const { id } = useParams();
   const editId = id ? Number(id) : null;
@@ -162,7 +151,6 @@ export function InboundOrderFormPage() {
     enabled: editId !== null,
   });
 
-  // Для рядків потрібні габарити товарів — у накладній є лише product_id
   const productIds = [...new Set(orderQuery.data?.items.map((item) => item.product_id) ?? [])];
   const productQueries = useQueries({
     queries: productIds.map((productId) => ({
@@ -184,6 +172,7 @@ export function InboundOrderFormPage() {
 function InboundOrderForm({ order, products }: { order: InboundOrder | null; products: Product[] }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const warehouseId = useCurrentWarehouse();
   const warehouseName = useWarehouseName();
   const isEdit = order !== null;
   const status: OrderStatus = order?.order_status ?? 'draft';
@@ -230,7 +219,6 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
     return { volume, weight };
   }, [lines]);
 
-  // Рядки, що повторюють пару «товар + пакування» з рядка вище, — підсвічуються одразу, без збереження
   const duplicateKeys = useMemo(() => {
     const seen = new Set<string>();
     const duplicates = new Set<number>();
@@ -249,7 +237,6 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
         other.key !== line.key && other.product?.product_id === product.product_id && other.packageType === line.packageType,
     );
 
-  // Будь-яка зміна позицій робить попередню перевірку вміщуваності неактуальною
   useEffect(() => {
     setCapacity((prev) => (prev.state === 'idle' ? prev : { state: 'idle' }));
   }, [lines]);
@@ -272,14 +259,44 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
     },
   });
 
-  const capacityMutation = useMutation({
-    mutationFn: checkInboundCapacity,
-    onMutate: () => setCapacity({ state: 'checking' }),
-    onSuccess: (result) => setCapacity(result ? { state: 'done', result } : { state: 'unavailable' }),
-    onError: () => setCapacity({ state: 'idle' }),
+  const postMutation = useMutation({
+    mutationFn: async () => {
+      const checkPastDate = !isEdit || header.date !== initialDate.current;
+      const nextErrors = validate(header, lines, checkPastDate);
+      setErrors(nextErrors);
+      if (countErrors(nextErrors) > 0) {
+        throw new Error('VALIDATION');
+      }
+      const payload: InboundOrderPayload = {
+        supplier_id: Number(header.supplierId),
+        warehouse_id: warehouseId as number,
+        invoice_number: header.invoiceNumber.trim(),
+        expected_delivery_date: fromDateInput(header.date),
+        items: toItems(lines),
+      };
+      const target = order ?? (await createInboundOrder(payload));
+      return postInboundOrder(target.inbound_order_id);
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['inbound-orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success(`Накладну ${inboundNumber(result.order_id)} проведено`);
+      navigate('/orders');
+    },
+    onError: (error) => {
+      if (error instanceof Error && error.message === 'VALIDATION') return;
+    },
   });
 
-  // ── Обробники ──
+  const capacityMutation = useMutation({
+    mutationFn: (items: InboundOrderItemPayload[]) =>
+      warehouseId !== null
+        ? checkInboundCapacity(warehouseId, items)
+        : Promise.reject(new Error('Склад не обрано')),
+    onMutate: () => setCapacity({ state: 'checking' }),
+    onSuccess: (result) => setCapacity({ state: 'done', result }),
+    onError: () => setCapacity({ state: 'unavailable' }),
+  });
 
   const setField = (field: keyof HeaderFields, value: string) => {
     setHeader((prev) => ({ ...prev, [field]: value }));
@@ -293,7 +310,6 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
     if (errors.lines[key]) {
       setErrors((prev) => {
         const lineErrors = { ...prev.lines[key] };
-        // Зміна пакування може прибрати дублікат «товар + пакування»
         if ('product' in patch || 'packageType' in patch) delete lineErrors.product;
         if ('quantity' in patch) delete lineErrors.quantity;
         return { ...prev, lines: { ...prev.lines, [key]: lineErrors } };
@@ -327,6 +343,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
     }
     saveMutation.mutate({
       supplier_id: Number(header.supplierId),
+      warehouse_id: warehouseId as number,
       invoice_number: header.invoiceNumber.trim(),
       expected_delivery_date: fromDateInput(header.date),
       items: toItems(lines),
@@ -340,8 +357,6 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
     capacityMutation.mutate(toItems(lines));
   };
 
-  // ── Відображення ──
-
   const errorCount = countErrors(errors);
   const serverError =
     saveMutation.isError && !errors.invoiceNumber && !errors.supplier
@@ -349,6 +364,11 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
         ? saveMutation.error.message
         : 'Не вдалося зберегти накладну'
       : null;
+  const postError = postMutation.isError
+    ? postMutation.error instanceof ApiError
+      ? postMutation.error
+      : new ApiError(500, 'Не вдалося провести накладну')
+    : null;
   const doesNotFit = capacity.state === 'done' && !capacity.result.fits;
   const supplierKnown = suppliers.some((s) => String(s.id) === header.supplierId);
 
@@ -383,6 +403,24 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
           {serverError}
         </p>
       )}
+      {postError && (
+        <div className={cx(styles.banner, styles.bannerBad)} role="alert">
+          <AlertTriangle size={16} aria-hidden />
+          <div>
+            <p>{postError.message}</p>
+            {postError.shortages.length > 0 && (
+              <ul className={styles.shortageList}>
+                {postError.shortages.map((shortage: any) => (
+                  <li key={shortage.product_id}>
+                    {shortage.product_name}: потрібно {shortage.requested}, розміщено {shortage.placed}, не вмістилося{' '}
+                    {shortage.unplaced} ({shortage.reason})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
       {readOnly && (
         <p className={styles.info}>
           Накладна вже в статусі «{ORDER_STATUS_LABELS[status]}» — редагувати можна лише чернетки.
@@ -391,7 +429,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
 
       <div className={styles.layout}>
         <div className={styles.column}>
-          {/* ── Загальна інформація ── */}
+          {}
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Загальна інформація</h2>
             <div className={styles.grid}>
@@ -483,7 +521,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
             </div>
           </section>
 
-          {/* ── Позиції ── */}
+          {}
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Позиції</h2>
             <div className={styles.lines} role="table" aria-label="Позиції накладної">
@@ -605,14 +643,14 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
           </section>
         </div>
 
-        {/* ── Перевірка вміщуваності ── */}
+        {}
         <aside className={cx(styles.card, styles.aside)}>
           <h2 className={styles.cardTitle}>Перевірка вміщуваності</h2>
           <CapacityPanel capacity={capacity} required={totals.volume} />
         </aside>
       </div>
 
-      {/* ── Дії ── */}
+      {}
       <div className={cx(styles.card, styles.actions)}>
         <Button variant="cancel" onClick={() => navigate('/orders')}>
           Скасувати
@@ -639,16 +677,25 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
               'Зберегти чернетку'
             )}
           </Button>
-          <Button variant="save" disabled title={POST_SOON}>
-            Провести накладну
+          <Button
+            variant="save"
+            disabled={readOnly || postMutation.isPending || !header.supplierId || lines.some((l) => !l.product)}
+            onClick={() => postMutation.mutate()}
+            title={readOnly ? 'Накладна вже проведена' : undefined}
+          >
+            {postMutation.isPending ? (
+              <>
+                <Loader size={17} className="spin" aria-hidden /> Проведення…
+              </>
+            ) : (
+              'Провести накладну'
+            )}
           </Button>
         </div>
       </div>
     </form>
   );
 }
-
-// ── Допоміжні компоненти ──────────────────────────────────────────────────
 
 function CapacityPanel({ capacity, required }: { capacity: Capacity; required: number }) {
   if (capacity.state === 'checking') {

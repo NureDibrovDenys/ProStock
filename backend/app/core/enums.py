@@ -1,11 +1,5 @@
 from enum import Enum
 
-# TODO: internationalization (i18n) and localization (i10n)
-#       with gettext() or gettext_lazy(): _()
-
-# TODO: OTHER = "other"
-#  InactiveReason, ObstacleType, UnitOfMeasure
-
 class RoleName(str, Enum):
     ROOT = "root"
     ADMIN = "administrator"
@@ -71,3 +65,14 @@ class OrderStatus(str, Enum):
     READY = "ready" # сформовано завдання
     COMPLETED = "completed"
     CANCELED = "canceled"
+
+class StockMovementType(str, Enum):
+    
+    INBOUND_ORDER = "inbound_order" # приймання за прихідною накладною
+    OUTBOUND_ORDER = "outbound_order" # відвантаження за вихідною накладною
+    MANUAL = "manual" # ручна корекція залишку
+
+class OrderType(str, Enum):
+    
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"

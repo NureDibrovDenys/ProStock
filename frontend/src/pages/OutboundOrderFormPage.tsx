@@ -12,6 +12,7 @@ import {
   getAvailableStock,
   getOutboundOrder,
   outboundNumber,
+  postOutboundOrder,
   updateOutboundOrder,
 } from '../api/orders';
 import { getProduct } from '../api/products';
@@ -27,6 +28,7 @@ import {
 import { Button } from '../components/Button';
 import { ProductPicker } from '../components/ProductPicker';
 import { ErrorState, LoadingState } from '../components/ui';
+import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { cx } from '../lib/cx';
 import { plural } from '../lib/format';
@@ -40,8 +42,6 @@ import {
   toDateInput,
   validQuantity,
 } from './orderFormShared';
-
-// ── Стан форми ────────────────────────────────────────────────────────────
 
 type Line = {
   key: number;
@@ -63,7 +63,6 @@ type HeaderFields = { recipientId: string; date: string };
 
 const NO_ERRORS: Errors = { lines: {} };
 const PACKAGES: PackageType[] = ['box', 'pallet'];
-const POST_SOON = 'Проведення накладної — окрема задача беклогу, кнопка запрацює разом з API проведення';
 const DUPLICATE = (pkg: PackageType) =>
   `Уже є в накладній з пакуванням «${PACKAGE_LABELS[pkg]}» — збільште кількість у тому рядку`;
 
@@ -73,9 +72,6 @@ const emptyLine = (): Line => ({ key: nextKey++, product: null, quantity: '', pa
 const amountFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 });
 const unitLabel = (product: Product) => UNIT_LABELS[product.unit_of_measure] ?? product.unit_of_measure;
 
-// ── Валідація ─────────────────────────────────────────────────────────────
-
-/** Ключі рядків, що повторюють пару «товар + пакування» з рядка вище. */
 function findDuplicates(lines: Line[]): Set<number> {
   const seen = new Set<string>();
   const duplicates = new Set<number>();
@@ -126,9 +122,6 @@ const toItems = (lines: Line[]): OutboundOrderItemPayload[] =>
     package_type: line.packageType,
   }));
 
-// ── Сторінка ──────────────────────────────────────────────────────────────
-
-/** Створення (/orders/outbound/new) і редагування (/orders/outbound/:id/edit) вихідної накладної. */
 export function OutboundOrderFormPage() {
   const { id } = useParams();
   const editId = id ? Number(id) : null;
@@ -139,7 +132,6 @@ export function OutboundOrderFormPage() {
     enabled: editId !== null,
   });
 
-  // Для рядків потрібні SKU, назва й одиниця виміру — у накладній є лише product_id
   const productIds = [...new Set(orderQuery.data?.items.map((item) => item.product_id) ?? [])];
   const productQueries = useQueries({
     queries: productIds.map((productId) => ({
@@ -161,6 +153,7 @@ export function OutboundOrderFormPage() {
 function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; products: Product[] }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const warehouseId = useCurrentWarehouse();
   const warehouseName = useWarehouseName();
   const isEdit = order !== null;
   const status: OrderStatus = order?.order_status ?? 'draft';
@@ -192,23 +185,20 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
     (r) => r.status === 'active' || (order !== null && r.id === order.recipient_id),
   );
 
-  // ── Доступні залишки обраних товарів ──
-
   const stockIds = useMemo(
     () => [...new Set(lines.flatMap((line) => (line.product ? [line.product.product_id] : [])))].sort((a, b) => a - b),
     [lines],
   );
   const stockQuery = useQuery({
-    queryKey: ['stock', stockIds],
-    queryFn: () => getAvailableStock(stockIds),
+    queryKey: ['stock', stockIds, warehouseId],
+    queryFn: () => getAvailableStock(stockIds, warehouseId),
     enabled: stockIds.length > 0 && !readOnly,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
   });
-  // null — бекенд ще не віддає залишки; undefined — ще завантажуються
   const stock = stockQuery.data;
 
-  /** Скільки кожного товару просять усі рядки разом (той самий товар може йти різним пакуванням). */
+  
   const requested = useMemo(() => {
     const result = new Map<number, number>();
     for (const line of lines) {
@@ -263,7 +253,34 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
     },
   });
 
-  // ── Обробники ──
+  const postMutation = useMutation({
+    mutationFn: async () => {
+      const checkPastDate = !isEdit || header.date !== initialDate.current;
+      const nextErrors = validate(header, lines, checkPastDate);
+      setErrors(nextErrors);
+      if (countErrors(nextErrors) > 0) {
+        throw new Error('VALIDATION');
+      }
+      const payload: OutboundOrderPayload = {
+        recipient_id: Number(header.recipientId),
+        warehouse_id: warehouseId as number,
+        planned_shipment_date: fromDateInput(header.date),
+        items: toItems(lines),
+      };
+      const target = order ?? (await createOutboundOrder(payload));
+      return postOutboundOrder(target.outbound_order_id);
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['outbound-orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast.success(`Накладну ${outboundNumber(result.order_id)} проведено`);
+      navigate('/orders');
+    },
+    onError: (error) => {
+      if (error instanceof Error && error.message === 'VALIDATION') return;
+    },
+  });
 
   const setField = (field: keyof HeaderFields, value: string) => {
     setHeader((prev) => ({ ...prev, [field]: value }));
@@ -277,7 +294,6 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
     if (errors.lines[key]) {
       setErrors((prev) => {
         const lineErrors = { ...prev.lines[key] };
-        // Зміна пакування може прибрати дублікат «товар + пакування»
         if ('product' in patch || 'packageType' in patch) delete lineErrors.product;
         if ('quantity' in patch) delete lineErrors.quantity;
         return { ...prev, lines: { ...prev.lines, [key]: lineErrors } };
@@ -309,16 +325,13 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    // Нестача залишку не блокує чернетку: товар може надійти до відвантаження.
-    // Перевірку залишків при проведенні робить бекенд.
     saveMutation.mutate({
       recipient_id: Number(header.recipientId),
+      warehouse_id: warehouseId as number,
       planned_shipment_date: fromDateInput(header.date),
       items: toItems(lines),
     });
   };
-
-  // ── Відображення ──
 
   const errorCount = countErrors(errors);
   const serverError =
@@ -327,6 +340,11 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
         ? saveMutation.error.message
         : 'Не вдалося зберегти накладну'
       : null;
+  const postError = postMutation.isError
+    ? postMutation.error instanceof ApiError
+      ? postMutation.error
+      : new ApiError(500, 'Не вдалося провести накладну')
+    : null;
   const shortCount = lines.filter(isShort).length;
   const recipientKnown = recipients.some((r) => String(r.id) === header.recipientId);
 
@@ -361,6 +379,24 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
           {serverError}
         </p>
       )}
+      {postError && (
+        <div className={styles.banner} role="alert">
+          <AlertTriangle size={16} aria-hidden />
+          <div>
+            <p>{postError.message}</p>
+            {postError.shortages.length > 0 && (
+              <ul className={styles.shortageList}>
+                {postError.shortages.map((shortage: any) => (
+                  <li key={shortage.product_id}>
+                    {shortage.product_name}: потрібно {shortage.requested}, доступно {shortage.available}, бракує{' '}
+                    {shortage.shortage}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
       {readOnly && (
         <p className={styles.info}>
           Накладна вже в статусі «{ORDER_STATUS_LABELS[status]}» — редагувати можна лише чернетки.
@@ -369,7 +405,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
 
       <div className={styles.layout}>
         <div className={styles.column}>
-          {/* ── Загальна інформація ── */}
+          {}
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Загальна інформація</h2>
             <div className={styles.grid}>
@@ -448,7 +484,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
             </div>
           </section>
 
-          {/* ── Позиції ── */}
+          {}
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Позиції</h2>
             <div className={styles.lines} role="table" aria-label="Позиції накладної">
@@ -569,7 +605,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
           </section>
         </div>
 
-        {/* ── Підсумок ── */}
+        {}
         <aside className={cx(styles.card, styles.aside)}>
           <h2 className={styles.cardTitle}>Підсумок</h2>
           <dl className={styles.totals}>
@@ -594,7 +630,7 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
         </aside>
       </div>
 
-      {/* ── Дії ── */}
+      {}
       <div className={cx(styles.card, styles.actions)}>
         <Button variant="cancel" onClick={() => navigate('/orders')}>
           Скасувати
@@ -609,16 +645,25 @@ function OutboundOrderForm({ order, products }: { order: OutboundOrder | null; p
               'Зберегти чернетку'
             )}
           </Button>
-          <Button variant="save" disabled title={POST_SOON}>
-            Провести накладну
+          <Button
+            variant="save"
+            disabled={readOnly || postMutation.isPending || !header.recipientId || lines.some((l) => !l.product)}
+            onClick={() => postMutation.mutate()}
+            title={readOnly ? 'Накладна вже проведена' : undefined}
+          >
+            {postMutation.isPending ? (
+              <>
+                <Loader size={17} className="spin" aria-hidden /> Проведення…
+              </>
+            ) : (
+              'Провести накладну'
+            )}
           </Button>
         </div>
       </div>
     </form>
   );
 }
-
-// ── Допоміжні компоненти ──────────────────────────────────────────────────
 
 function StockCell({
   product,
