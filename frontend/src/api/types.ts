@@ -117,6 +117,14 @@ export interface RackSummary {
   rack_code: string;
   shelves_count: number;
   fill_percent: number;
+  volume_fill_percent: number;
+  weight_fill_percent: number;
+  used_volume_m3: number;
+  total_volume_m3: number;
+  used_weight_kg: number;
+  total_max_weight_kg: number;
+  shelves_used: number;
+  overloaded: boolean;
 }
 
 export interface ShelfInfo {
@@ -158,6 +166,14 @@ export interface Shelf {
   status: ShelfStatus;
   inactive_reason: InactiveReason | null;
   volume_m3: number;
+  used_volume_m3: number;
+  used_weight_kg: number;
+  volume_fill_percent: number;
+  weight_fill_percent: number;
+  free_volume_m3: number;
+  free_weight_kg: number;
+  items_count: number;
+  overloaded: boolean;
 }
 
 /**
@@ -360,6 +376,7 @@ export interface InboundOrderItem {
 export interface InboundOrder {
   inbound_order_id: number;
   supplier_id: number;
+  warehouse_id: number;
   /** № супровідного документа постачальника (унікальний). */
   invoice_number: string;
   expected_delivery_date: string;
@@ -377,6 +394,7 @@ export interface InboundOrderItemPayload {
 
 export interface InboundOrderPayload {
   supplier_id: number;
+  warehouse_id: number;
   invoice_number: string;
   expected_delivery_date: string;
   items: InboundOrderItemPayload[];
@@ -389,6 +407,7 @@ export interface InboundOrderPayload {
 export interface OutboundOrder {
   outbound_order_id: number;
   recipient_id: number;
+  warehouse_id: number;
   /** Номер накладної, присвоєний автоматично (унікальний). */
   invoice_number: string;
   planned_shipment_date: string;
@@ -404,8 +423,62 @@ export type OutboundOrderItemPayload = InboundOrderItemPayload;
 
 export interface OutboundOrderPayload {
   recipient_id: number;
+  warehouse_id: number;
   planned_shipment_date: string;
   items: OutboundOrderItemPayload[];
+}
+
+export type OrderType = 'inbound' | 'outbound';
+
+export interface OrderListItem {
+  order_type: OrderType;
+  order_id: number;
+  number: string;
+  invoice_number: string;
+  counterparty_id: number;
+  counterparty_name: string;
+  warehouse_id: number;
+  order_status: OrderStatus;
+  date: string;
+  items_count: number;
+  total_quantity: string;
+}
+
+export interface OrderListResponse {
+  items: OrderListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export interface Shortage {
+  product_id: number;
+  product_name: string;
+  sku_code: string;
+  requested: string;
+  available: string;
+  shortage: string;
+}
+
+export interface CapacityShortage {
+  product_id: number;
+  product_name: string;
+  sku_code: string;
+  requested: string;
+  placed: string;
+  unplaced: string;
+  reason: string;
+}
+
+export interface PostOrderResult {
+  order_id: number;
+  order_type: OrderType;
+  order_status: OrderStatus;
+  posted_at: string;
+  items_count: number;
+  total_quantity: string;
+  processed_quantity: string;
 }
 
 /** Доступний залишок товару на поточному складі, в одиницях виміру товару. */

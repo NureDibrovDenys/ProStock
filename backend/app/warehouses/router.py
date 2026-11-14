@@ -1,19 +1,4 @@
-"""
-REST API для складів, стелажів і полиць.
 
-Права доступу:
-  GET  /api/v1/warehouses        — тільки адміністратор
-  GET  /api/v1/warehouses/{id}   — будь-який авторизований користувач
-  POST /api/v1/warehouses        — тільки адміністратор
-  PATCH /api/v1/warehouses/{id}  — тільки адміністратор
-  DELETE /api/v1/warehouses/{id} — тільки адміністратор
-
-  GET  /api/v1/warehouses/{id}/racks               — будь-який авторизований
-  GET  /api/v1/warehouses/{id}/racks/{rack_code}   — будь-який авторизований
-  POST   /api/v1/warehouses/{id}/racks/{code}/shelves      — адмін / warehouse_manager
-  PATCH  /api/v1/warehouses/{id}/racks/{code}/shelves/{id} — адмін / warehouse_manager
-  DELETE /api/v1/warehouses/{id}/racks/{code}/shelves/{id} — адмін / warehouse_manager
-"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,6 +11,7 @@ from app.utils.role_checker import RoleChecker
 from app.routers.map import _check_warehouse_access
 from app.utils.security import get_current_user
 from app.warehouses import crud
+from app.warehouses.services import fill_service
 from app.warehouses.schemas import (
     RackDetailsResponse,
     RackSummaryResponse,
@@ -40,16 +26,13 @@ from app.warehouses.schemas import (
 
 router = APIRouter(prefix="/api/v1/warehouses", tags=["Warehouses"])
 
-# Залежність: тільки root і administrator
 require_admin = RoleChecker(*[role.value for role in ADMIN_ROLES])
 
-# Залежності для rack/shelf ендпоінтів
 require_authenticated = RoleChecker(*[r.value for r in ALL_ROLES])
 require_write = RoleChecker(*[r.value for r in ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}])
 
-
 def _to_response(warehouse) -> WarehouseResponse:
-    """Перетворює ORM-об'єкт Warehouse у схему відповіді"""
+    
     return WarehouseResponse(
         warehouse_id=warehouse.id,
         warehouse_name=warehouse.name,
@@ -57,30 +40,22 @@ def _to_response(warehouse) -> WarehouseResponse:
         total_warehouse_area=warehouse.total_area,
     )
 
-
-
-
 def check_shelf_warehouse_access(
     current_user: dict,
     warehouse_id: int,
 ) -> None:
-    """Перевіряє право користувача працювати з конкретним складом."""
+    
 
     admin_roles = {role.value for role in ADMIN_ROLES}
 
-    #адміністратори мають доступ до всіх складів
     if current_user["role"] in admin_roles:
         return
 
-    #решта користувачів  тільки до призначеного складу
     if current_user.get("warehouse_id") != warehouse_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="У вас немає доступу до цього складу",
         )
-
-
-# ── READ ─────────────────────────────────────────────────────────────────────
 
 @router.get(
     "/{warehouse_id}",
@@ -99,9 +74,6 @@ async def get_warehouse(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
     return _to_response(warehouse)
 
-
-# ── READ (admin only) ────────────────────────────────────────────────────────
-
 @router.get(
     "",
     response_model=list[WarehouseResponse],
@@ -114,9 +86,6 @@ async def list_warehouses(
 ) -> list[WarehouseResponse]:
     warehouses = await crud.list_warehouses(session)
     return [_to_response(w) for w in warehouses]
-
-
-# ── WRITE (admin only) ────────────────────────────────────────────────────────
 
 @router.post(
     "",
@@ -132,7 +101,6 @@ async def create_warehouse(
 ) -> WarehouseResponse:
     warehouse = await crud.create_warehouse(session, data)
     return _to_response(warehouse)
-
 
 @router.patch(
     "/{warehouse_id}",
@@ -154,7 +122,6 @@ async def update_warehouse(
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
 
-    # exclude_unset: явний {"address": null} — це зміна (стерти адресу), а не порожнє тіло
     if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -163,7 +130,6 @@ async def update_warehouse(
 
     warehouse = await crud.update_warehouse(session, warehouse, data)
     return _to_response(warehouse)
-
 
 @router.delete(
     "/{warehouse_id}",
@@ -184,10 +150,13 @@ async def delete_warehouse(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
     await crud.delete_warehouse(session, warehouse)
 
-
-# ── Rack helpers ──────────────────────────────────────────────────────────────
-
-def _shelf_to_info(shelf) -> ShelfInfoResponse:
+def _shelf_to_info(shelf, fill=None) -> ShelfInfoResponse:
+    used_volume = float(fill.used_volume_m3) if fill is not None else 0.0
+    used_weight = float(fill.used_weight_kg) if fill is not None else 0.0
+    total_volume = float(fill.total_volume_m3) if fill is not None else shelf.total_volume_m3
+    total_weight = (
+        float(fill.total_max_weight_kg) if fill is not None else float(shelf.max_weight)
+    )
     return ShelfInfoResponse(
         shelf_id=shelf.id,
         shelf_code=shelf.code,
@@ -195,21 +164,47 @@ def _shelf_to_info(shelf) -> ShelfInfoResponse:
         occupied=1 if shelf.is_occupied else 0,
         capacity=1,
         shelf_status=shelf.status.value if hasattr(shelf.status, "value") else shelf.status,
+        volume_fill_percent=fill.volume_fill_percent if fill is not None else 0.0,
+        weight_fill_percent=fill.weight_fill_percent if fill is not None else 0.0,
+        used_volume_m3=round(used_volume, 4),
+        total_volume_m3=round(total_volume, 4),
+        used_weight_kg=round(used_weight, 3),
+        total_max_weight_kg=round(total_weight, 3),
+        items_count=fill.items_count if fill is not None else 0,
+        overloaded=fill.is_overloaded if fill is not None else False,
     )
 
-
-def _rack_to_summary(rack) -> RackSummaryResponse:
-    total = max(len(rack.shelves), 1)
-    occupied_count = sum(1 for s in rack.shelves if s.is_occupied)
+def _rack_to_summary(rack, fill=None) -> RackSummaryResponse:
+    shelves_count = len(rack.shelves) if rack.shelves else rack.shelves_count
+    if fill is None:
+        return RackSummaryResponse(
+            rack_id=rack.id,
+            rack_code=rack.code,
+            shelves_count=shelves_count,
+            fill_percent=0.0,
+        )
     return RackSummaryResponse(
         rack_id=rack.id,
         rack_code=rack.code,
-        shelves_count=len(rack.shelves) if rack.shelves else rack.shelves_count,
-        fill_percent=round(occupied_count / total * 100, 1),
+        shelves_count=shelves_count,
+        fill_percent=fill.volume_fill_percent,
+        volume_fill_percent=fill.volume_fill_percent,
+        weight_fill_percent=fill.weight_fill_percent,
+        used_volume_m3=round(float(fill.used_volume_m3), 4),
+        total_volume_m3=round(float(fill.total_volume_m3), 4),
+        used_weight_kg=round(float(fill.used_weight_kg), 3),
+        total_max_weight_kg=round(float(fill.total_max_weight_kg), 3),
+        shelves_used=fill.shelves_used,
+        overloaded=fill.is_overloaded,
     )
 
-
-def _shelf_to_response(shelf) -> ShelfResponse:
+def _shelf_to_response(shelf, fill=None) -> ShelfResponse:
+    used_volume = float(fill.used_volume_m3) if fill is not None else 0.0
+    used_weight = float(fill.used_weight_kg) if fill is not None else 0.0
+    total_volume = float(fill.total_volume_m3) if fill is not None else shelf.total_volume_m3
+    total_weight = (
+        float(fill.total_max_weight_kg) if fill is not None else float(shelf.max_weight)
+    )
     return ShelfResponse(
         shelf_id=shelf.id,
         shelf_code=shelf.code,
@@ -227,10 +222,15 @@ def _shelf_to_response(shelf) -> ShelfResponse:
             else shelf.inactive_reason
         ),
         volume_m3=shelf.total_volume_m3,
+        used_volume_m3=round(used_volume, 4),
+        used_weight_kg=round(used_weight, 3),
+        volume_fill_percent=fill.volume_fill_percent if fill is not None else 0.0,
+        weight_fill_percent=fill.weight_fill_percent if fill is not None else 0.0,
+        free_volume_m3=round(max(0.0, total_volume - used_volume), 4),
+        free_weight_kg=round(max(0.0, total_weight - used_weight), 3),
+        items_count=fill.items_count if fill is not None else 0,
+        overloaded=fill.is_overloaded if fill is not None else False,
     )
-
-
-# ── Rack endpoints ────────────────────────────────────────────────────────────
 
 @router.get(
     "/{warehouse_id}/racks",
@@ -247,8 +247,8 @@ async def list_racks(
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
     racks = await crud.get_racks_by_warehouse(session, warehouse_id)
-    return [_rack_to_summary(r) for r in racks]
-
+    rack_fills = await fill_service.get_rack_fills(session, warehouse_id)
+    return [_rack_to_summary(r, rack_fills.get(r.id)) for r in racks]
 
 @router.get(
     "/{warehouse_id}/racks/{rack_code}",
@@ -268,17 +268,24 @@ async def get_rack(
     rack = await crud.get_rack_by_code(session, warehouse_id, rack_code)
     if rack is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Стелаж не знайдено")
+    rack_fills = await fill_service.get_rack_fills(session, warehouse_id)
+    fill = rack_fills.get(rack.id)
+    shelf_fills = fill.shelves if fill is not None else {}
     return RackDetailsResponse(
         rack_id=rack.id,
         rack_code=rack.code,
         zone_name=None,
         updated_at=None,
-        shelves=[_shelf_to_info(s) for s in rack.shelves],
+        shelves=[_shelf_to_info(s, shelf_fills.get(s.id)) for s in rack.shelves],
+        volume_fill_percent=fill.volume_fill_percent if fill is not None else 0.0,
+        weight_fill_percent=fill.weight_fill_percent if fill is not None else 0.0,
+        used_volume_m3=round(float(fill.used_volume_m3), 4) if fill is not None else 0.0,
+        total_volume_m3=round(float(fill.total_volume_m3), 4) if fill is not None else 0.0,
+        used_weight_kg=round(float(fill.used_weight_kg), 3) if fill is not None else 0.0,
+        total_max_weight_kg=(
+            round(float(fill.total_max_weight_kg), 3) if fill is not None else 0.0
+        ),
     )
-
-
-# ── Shelf endpoints ───────────────────────────────────────────────────────────
-
 
 @router.get(
     "/{warehouse_id}/racks/{rack_code}/shelves",
@@ -312,9 +319,9 @@ async def list_shelves(
         )
 
     shelves = await crud.get_shelves_by_rack(session, rack.id)
+    shelf_fills = await fill_service.get_shelf_fills(session, warehouse_id)
 
-    return [_shelf_to_response(shelf) for shelf in shelves]
-
+    return [_shelf_to_response(shelf, shelf_fills.get(shelf.id)) for shelf in shelves]
 
 @router.get(
     "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",
@@ -356,9 +363,8 @@ async def get_shelf(
             detail="Полицю не знайдено",
         )
 
-    return _shelf_to_response(shelf)
-
-
+    shelf_fills = await fill_service.get_shelf_fills(session, warehouse_id)
+    return _shelf_to_response(shelf, shelf_fills.get(shelf.id))
 
 @router.post(
     "/{warehouse_id}/racks/{rack_code}/shelves",
@@ -386,7 +392,6 @@ async def create_shelf(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return _shelf_to_response(shelf)
 
-
 @router.patch(
     "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",
     response_model=ShelfResponse,
@@ -401,7 +406,6 @@ async def update_shelf(
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
     _check_warehouse_access(current_user, warehouse_id)
-    # exclude_unset: поле, явно передане як null (напр., inactive_reason), — це зміна, а не «порожнє» тіло
     if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -424,7 +428,6 @@ async def update_shelf(
             detail = str(exc),
         )from exc
     return _shelf_to_response(shelf)
-
 
 @router.delete(
     "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",

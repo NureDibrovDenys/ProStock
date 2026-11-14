@@ -7,18 +7,19 @@ type MapLayersProps = {
   viewport: Viewport;
   size: { width: number; height: number };
   selectedId?: string | null;
-  /** Кілька виділених об'єктів (редактор); доповнює selectedId. */
+  
   selectedIds?: ReadonlySet<string>;
   hoveredId?: string | null;
   conflicts?: Set<string>;
-  /** Підпис стелажа замість «N пол.», напр. заповненість на сторінці складу. */
+  
   rackCaption?: (rack: ShapeObject) => string | null;
+  
+  rackFill?: Record<string, number>;
   showGrid?: boolean;
-  /** Додаткові шари поверх мапи (у світових координатах), напр. чернетки редактора. */
+  
   children?: ReactNode;
 };
 
-/** Малює мапу складу в SVG. Інтерактивні елементи позначені атрибутом data-id. */
 export function MapLayers({
   objs,
   viewport,
@@ -28,12 +29,13 @@ export function MapLayers({
   hoveredId,
   conflicts,
   rackCaption,
+  rackFill,
   showGrid = true,
   children,
 }: MapLayersProps) {
   const { x: tx, y: ty, scale: k } = viewport;
   const isSelected = (id: string) => selectedId === id || (selectedIds?.has(id) ?? false);
-  const sw = (n: number) => n / k; // товщина лінії, стала на екрані
+  const sw = (n: number) => n / k;
   const room = objs.find((o) => o.t === 'room');
   const shapes = objs.filter(isShape);
   const partitions = objs.filter(isPartition);
@@ -96,6 +98,7 @@ export function MapLayers({
               hovered={hoveredId === o.id}
               conflict={conflicts?.has(o.id) ?? false}
               caption={o.t === 'rack' ? rackCaption?.(o) : undefined}
+              fill={o.t === 'rack' ? rackFill?.[o.name] : undefined}
             />
           ))}
         {shapes
@@ -117,6 +120,7 @@ function Shape({
   hovered,
   conflict,
   caption,
+  fill,
 }: {
   o: ShapeObject;
   k: number;
@@ -124,6 +128,7 @@ function Shape({
   hovered: boolean;
   conflict: boolean;
   caption?: string | null;
+  fill?: number;
 }) {
   const sw = (n: number) => n / k;
   const fs = 12 / k;
@@ -133,6 +138,9 @@ function Shape({
   if (o.t === 'rack') {
     const shelves = Math.max(1, o.shelves ?? 1);
     label = `${o.name} · ${caption ?? `${shelves} пол.`}`;
+    const fillPercent = Math.min(100, Math.max(0, fill ?? 0));
+    const fillTone =
+      fillPercent >= 80 ? 'var(--map-bad)' : fillPercent >= 50 ? 'var(--map-acc)' : 'var(--map-pri)';
     body = (
       <>
         <rect
@@ -143,6 +151,17 @@ function Shape({
           fill={conflict ? 'var(--map-bad)' : hovered ? 'var(--map-pri-hover)' : 'var(--map-pri)'}
           fillOpacity=".9"
         />
+        {fillPercent > 0 && (
+          <rect
+            x={-o.w / 2}
+            y={-o.h / 2}
+            width={o.w * (fillPercent / 100)}
+            height={o.h}
+            fill={fillTone}
+            fillOpacity=".45"
+            pointerEvents="none"
+          />
+        )}
         {Array.from({ length: shelves - 1 }, (_, i) => {
           const x = -o.w / 2 + ((i + 1) * o.w) / shelves;
           return <line key={i} x1={x} x2={x} y1={-o.h / 2} y2={o.h / 2} stroke="#fff" strokeOpacity=".5" strokeWidth={sw(1)} />;
@@ -194,7 +213,6 @@ function Shape({
     );
   }
 
-  // Підпис стелажа — над ним (з урахуванням повороту), решти — по центру
   const rad = (o.a * Math.PI) / 180;
   const lx = o.t === 'rack' ? o.x + Math.sin(rad) * (o.h / 2 + fs) : o.x;
   const ly = o.t === 'rack' ? o.y - Math.cos(rad) * (o.h / 2 + fs) : o.y;
@@ -216,7 +234,7 @@ function Shape({
           />
         )}
       </g>
-      {/* Перешкоди без підпису — штрихування й так їх позначає, а назва лише заважає */}
+      {}
       {o.t !== 'obst' && (
         <text
           x={lx}
@@ -238,7 +256,7 @@ function Partition({ p, k, selected, conflict }: { p: PartitionObject; k: number
   const line = { x1: p.start[0], y1: p.start[1], x2: p.end[0], y2: p.end[1] };
   return (
     <g data-id={p.id}>
-      {/* Невидима широка лінія — щоб тонку перегородку було легко вибрати */}
+      {}
       <line {...line} stroke="transparent" strokeWidth={Math.max(p.thickness, 12 / k)} />
       <line
         {...line}

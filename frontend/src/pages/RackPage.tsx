@@ -61,7 +61,6 @@ export function RackPage() {
       return deleteShelf(warehouseId, rackCode, shelf.shelf_id);
     },
     onSuccess: (_data, shelf) => {
-      // Список стелажів і дашборд залежать від кількості та стану полиць
       void queryClient.invalidateQueries({ queryKey: ['shelves', warehouseId, rackCode] });
       void queryClient.invalidateQueries({ queryKey: ['racks', warehouseId] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', warehouseId] });
@@ -70,11 +69,12 @@ export function RackPage() {
     },
   });
 
-  // Місткість полиці на бекенді — одне палетомісце, зайнятість — булева
   const capacity = shelves.length;
-  const occupied = shelves.filter((shelf) => shelf.is_occupied).length;
-  const free = capacity - occupied;
-  const fill = capacity ? Math.round((occupied / capacity) * 100) : 0;
+  const fill = capacity
+    ? Math.round(
+        shelves.reduce((sum, shelf) => sum + (shelf.volume_fill_percent ?? 0), 0) / capacity,
+      )
+    : 0;
 
   if (warehouseId === null) {
     return <NoWarehouseState />;
@@ -101,8 +101,8 @@ export function RackPage() {
           <StatGrid>
             <StatCard label="Заповненість" value={`${fill}%`} caption="від загальної місткості" />
             <StatCard label="Місткість" value={String(capacity)} caption={plural(capacity, ['палетомісце', 'палетомісця', 'палетомісць'])} />
-            <StatCard label="Зайнято" value={String(occupied)} caption={plural(occupied, ['палета', 'палети', 'палет'])} />
-            <StatCard label="Вільно" value={String(free)} caption={plural(free, ['палетомісце', 'палетомісця', 'палетомісць'])} />
+            <StatCard label="Використано" value={`${fill}%`} caption="від загального об'єму" />
+            <StatCard label="Місткість" value={String(capacity)} caption={plural(capacity, ['полиця', 'полиці', 'полиць'])} />
           </StatGrid>
 
           <section className={styles.shelves}>
@@ -143,7 +143,7 @@ export function RackPage() {
                   </thead>
                   <tbody>
                     {shelves.map((shelf) => {
-                      const percent = shelf.is_occupied ? 100 : 0;
+                      const percent = Math.round(shelf.volume_fill_percent ?? 0);
                       return (
                         <tr key={shelf.shelf_id}>
                           <td className={styles.shelfName}>
@@ -166,6 +166,10 @@ export function RackPage() {
                               <ProgressBar percent={percent} />
                               <span className={styles.percent}>{percent}%</span>
                             </div>
+                            <span className={styles.meta}>
+                              {formatNumber(Number(shelf.used_volume_m3))} / {formatNumber(Number(shelf.volume_m3))} м³ ·{' '}
+                              {formatNumber(Number(shelf.used_weight_kg))} / {formatNumber(Number(shelf.max_weight))} кг
+                            </span>
                           </td>
                           {canManage && (
                             <td>

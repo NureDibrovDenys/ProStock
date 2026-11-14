@@ -38,6 +38,16 @@ class InboundOrder(Base):
         nullable=False,
         index=True,
     )
+    warehouse_id: Mapped[int] = mapped_column(
+        "warehouse_id",
+        BigInteger,
+        ForeignKey(
+            "warehouse.warehouse_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
     invoice_number: Mapped[str] = mapped_column(
         "invoice_number",
         String(50),
@@ -173,6 +183,16 @@ class OutboundOrder(Base):
         BigInteger,
         ForeignKey(
             "recipient.recipient_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+    warehouse_id: Mapped[int] = mapped_column(
+        "warehouse_id",
+        BigInteger,
+        ForeignKey(
+            "warehouse.warehouse_id",
             ondelete="RESTRICT",
         ),
         nullable=False,
