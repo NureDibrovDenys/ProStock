@@ -256,6 +256,70 @@
   color: var(--color-muted);
 }
 
+/* Вихідна накладна: менше колонок, замість об'єму й ваги — доступний залишок */
+.lineOutbound {
+  grid-template-columns: minmax(150px, 1fr) 70px 60px 104px 112px 30px;
+}
+
+/* Рядок, де кількість перевищує доступний залишок */
+.lineShort {
+  margin: 0 -8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fde8e8;
+}
+
+.selectSmall {
+  padding-right: 26px;
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+}
+
+.stock {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.stockOk svg {
+  color: var(--color-success-text);
+}
+
+.stockShort {
+  color: var(--color-danger);
+}
+
+.stockMuted {
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+/* Підсумок вихідної накладної */
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.totalRow dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 .segmented {
   display: flex;
   height: 34px;
@@ -449,6 +513,12 @@
 
   .line .cell:first-child {
     grid-column: 1 / -1;
+  }
+
+  .lineShort {
+    margin: 0;
+    padding: 10px;
+    border-color: #f0a9a9;
   }
 
   .cell[data-label]::before {
