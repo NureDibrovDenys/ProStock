@@ -10,6 +10,7 @@ export type ZoneType = 'inbound_dock' | 'storage_area' | 'outbound_dock';
 export type ObstacleType = 'column' | 'pillar' | 'niche' | 'restricted_zone' | 'other';
 export type PointType = 'inbound' | 'outbound' | 'general_entry';
 export type ShelfStatus = 'active' | 'occupied' | 'inactive';
+export type InactiveReason = 'damaged' | 'maintenance' | 'stocktaking' | 'quality_control' | 'other';
 
 // ── Склад ─────────────────────────────────────────────────────────────────
 
@@ -134,6 +135,49 @@ export interface RackDetails {
   updated_at: string;
   shelves: ShelfInfo[];
 }
+
+/**
+ * Повні дані полиці — GET /api/v1/warehouses/{id}/racks/{code}/shelves[/{shelf_id}]
+ * (backend: ShelfResponse).
+ */
+export interface Shelf {
+  shelf_id: number;
+  shelf_code: string;
+  /** QR формується на бекенді як «R{rack_code}-{shelf_code}». */
+  qr: string;
+  rack_id: number;
+  /** Ширина, м (> 0). */
+  width: string;
+  /** Довжина, м (> 0). */
+  length: string;
+  /** Висота, м (> 0). */
+  height: string;
+  /** Максимальне навантаження, кг (> 0). */
+  max_weight: string;
+  is_occupied: boolean;
+  status: ShelfStatus;
+  inactive_reason: InactiveReason | null;
+  volume_m3: number;
+}
+
+/**
+ * Тіло POST .../shelves — створення полиці (backend: ShelfCreate).
+ * Статус «occupied» вручну встановити не можна — його визначають складські операції.
+ */
+export interface ShelfInput {
+  /** Код полиці, унікальний у стелажі (макс. 50 символів). Зміна коду PATCH-ем не передбачена. */
+  code: string;
+  width: number;
+  length: number;
+  height: number;
+  max_weight: number;
+  status: 'active' | 'inactive';
+  /** Обовʼязковий, якщо status === 'inactive'. */
+  inactive_reason: InactiveReason | null;
+}
+
+/** Тіло PATCH .../shelves/{shelf_id} — лише змінені поля (backend: ShelfUpdate, без code). */
+export type ShelfPatch = Partial<Omit<ShelfInput, 'code'>>;
 
 // ── Дашборд ───────────────────────────────────────────────────────────────
 
@@ -364,7 +408,9 @@ export type Permission =
   /** Адміністратор і менеджер складу: довідники постачальників та одержувачів. */
   | 'directories_manage'
   /** Адміністратор і менеджер складу: прихідні та вихідні накладні. */
-  | 'orders_manage';
+  | 'orders_manage'
+  /** Адміністратор і менеджер складу: створення / редагування / видалення полиць. */
+  | 'shelves_manage';
 
 export interface AuthUser {
   user_id: number;

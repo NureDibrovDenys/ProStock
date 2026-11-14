@@ -401,9 +401,10 @@ async def update_shelf(
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
     _check_warehouse_access(current_user, warehouse_id)
-    if data.model_dump(exclude_none=True) == {}:
+    # exclude_unset: поле, явно передане як null (напр., inactive_reason), — це зміна, а не «порожнє» тіло
+    if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Потрібно передати хоча б одне поле для оновлення",
         )
     warehouse = await crud.get_warehouse(session, warehouse_id)

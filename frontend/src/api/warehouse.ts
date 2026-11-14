@@ -1,5 +1,15 @@
 import { request } from './client';
-import type { DashboardStats, RackDetails, RackSummary, Warehouse, WarehouseInput, WarehouseMap } from './types';
+import type {
+  DashboardStats,
+  RackDetails,
+  RackSummary,
+  Shelf,
+  ShelfInput,
+  ShelfPatch,
+  Warehouse,
+  WarehouseInput,
+  WarehouseMap,
+} from './types';
 
 /** GET /api/v1/warehouses/{id} */
 export const getWarehouse = (warehouseId: number) => request<Warehouse>(`/warehouses/${warehouseId}`);
@@ -41,3 +51,33 @@ export const getRacks = (warehouseId: number) => request<RackSummary[]>(`/wareho
 /** GET /api/v1/warehouses/{id}/racks/{rack_code} — полиці стелажа. */
 export const getRackDetails = (warehouseId: number, rackCode: string) =>
   request<RackDetails>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}`);
+
+// ── Полиці ─────────────────────────────────────────────────────────────────
+
+/** GET /api/v1/warehouses/{id}/racks/{rack_code}/shelves — повні дані полиць стелажа. */
+export const listShelves = (warehouseId: number, rackCode: string) =>
+  request<Shelf[]>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves`);
+
+/** GET /api/v1/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id} — повні дані полиці. */
+export const getShelf = (warehouseId: number, rackCode: string, shelfId: number) =>
+  request<Shelf>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves/${shelfId}`);
+
+/** POST /api/v1/warehouses/{id}/racks/{rack_code}/shelves — створення полиці (адмін / менеджер). */
+export const createShelf = (warehouseId: number, rackCode: string, data: ShelfInput) =>
+  request<Shelf>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves`, {
+    method: 'POST',
+    body: data,
+  });
+
+/** PATCH /api/v1/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id} — часткове оновлення (адмін / менеджер). */
+export const updateShelf = (warehouseId: number, rackCode: string, shelfId: number, data: ShelfPatch) =>
+  request<Shelf>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves/${shelfId}`, {
+    method: 'PATCH',
+    body: data,
+  });
+
+/** DELETE /api/v1/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id} — видалення полиці (адмін / менеджер). */
+export const deleteShelf = (warehouseId: number, rackCode: string, shelfId: number) =>
+  request<void>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves/${shelfId}`, {
+    method: 'DELETE',
+  });
