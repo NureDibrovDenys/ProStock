@@ -1,4 +1,4 @@
-import { Building2, LogOut, Package, Users, Warehouse, BookOpen, FileText, LogOut, Package, Users, Warehouse } from 'lucide-react';
+import { Building2, BookOpen, FileText, LogOut, Package, Users, Warehouse } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { Permission } from '../api/types';
 import { ROLE_LABELS, isAdminRole } from '../api/users';
