@@ -2,7 +2,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth/RequireAuth';
 import { RequirePermission } from './auth/RequirePermission';
 import { AppLayout } from './components/AppLayout';
+import { CounterpartyFormPage } from './pages/CounterpartyFormPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { DirectoriesPage } from './pages/DirectoriesPage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { LoginPage } from './pages/LoginPage';
 import { MapEditorPage } from './pages/MapEditorPage';
@@ -50,6 +52,32 @@ export function App() {
             element={
               <RequirePermission permission={['users_manage', 'storekeepers_manage']}>
                 <NewEmployeePage />
+              </RequirePermission>
+            }
+          />
+          {/* Supplier and recipient directories */}
+          <Route path="/directories" element={<Navigate to="/directories/suppliers" replace />} />
+          <Route
+            path="/directories/:kind"
+            element={
+              <RequirePermission permission="directories_manage">
+                <DirectoriesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/directories/:kind/new"
+            element={
+              <RequirePermission permission="directories_manage">
+                <CounterpartyFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/directories/:kind/:id/edit"
+            element={
+              <RequirePermission permission="directories_manage">
+                <CounterpartyFormPage />
               </RequirePermission>
             }
           />

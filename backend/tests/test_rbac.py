@@ -86,6 +86,7 @@ async def test_permissions_payload_matches_role(client: AsyncClient):
         "users_manage": False,
         "storekeepers_manage": False,
         "warehouse_map_write": False,
+        "directories_manage": False,
     }
 
 
@@ -97,8 +98,10 @@ async def test_map_write_permission_only_for_admin(client: AsyncClient):
     assert manager_me["permissions"]["products_write"] is True
     assert manager_me["permissions"]["storekeepers_manage"] is True
     assert manager_me["permissions"]["users_manage"] is False
+    assert manager_me["permissions"]["directories_manage"] is True
 
     admin_token = await login(client, ADMIN)
     admin_me = (await client.get(f"{API}/auth/me", headers=auth(admin_token))).json()
     assert admin_me["permissions"]["warehouse_map_write"] is True
     assert admin_me["permissions"]["storekeepers_manage"] is False
+    assert admin_me["permissions"]["directories_manage"] is True

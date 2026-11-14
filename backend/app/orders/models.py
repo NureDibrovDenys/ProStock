@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -9,7 +10,7 @@ from sqlalchemy import (
     func,
     DateTime,
     ForeignKey,
-    Integer,
+    Numeric,
     CheckConstraint,
     UniqueConstraint,
 )
@@ -127,9 +128,9 @@ class InboundOrderItem(Base):
         nullable=False,
         index=True,
     )
-    quantity: Mapped[int] = mapped_column(
+    quantity: Mapped[Decimal] = mapped_column(
         "quantity",
-        Integer,
+        Numeric(precision=10, scale=2),
         nullable=False,
     )
     package_type: Mapped[str] = mapped_column(
@@ -152,12 +153,6 @@ class InboundOrderItem(Base):
             "quantity > 0",
             name="check_inbound_order_item_quantity_positive",
         ),
-        UniqueConstraint(
-            "inbound_order_id",
-            "product_id",
-            "package_type",
-            name="unique_order_product_package",
-        )
     )
     
     def __repr__(self) -> str:

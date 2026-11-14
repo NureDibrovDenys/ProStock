@@ -3,6 +3,9 @@ from enum import Enum
 # TODO: internationalization (i18n) and localization (i10n)
 #       with gettext() or gettext_lazy(): _()
 
+# TODO: OTHER = "other"
+#  InactiveReason, ObstacleType, UnitOfMeasure
+
 class RoleName(str, Enum):
     ROOT = "root"
     ADMIN = "administrator"
