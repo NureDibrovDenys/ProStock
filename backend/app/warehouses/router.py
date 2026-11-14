@@ -23,6 +23,7 @@ from app.core.db import get_async_session
 from app.core.enums import RoleName
 from app.core.rbac import ADMIN_ROLES, ALL_ROLES
 from app.utils.role_checker import RoleChecker
+from app.routers.map import _check_warehouse_access
 from app.utils.security import get_current_user
 from app.warehouses import crud
 from app.warehouses.schemas import (
@@ -92,8 +93,7 @@ async def get_warehouse(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> WarehouseResponse:
-    check_shelf_warehouse_access(current_user, warehouse_id)
-    
+    _check_warehouse_access(current_user, warehouse_id)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -154,6 +154,7 @@ async def update_warehouse(
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
 
+    # exclude_unset: явний {"address": null} — це зміна (стерти адресу), а не порожнє тіло
     if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -241,10 +242,7 @@ async def list_racks(
     current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[RackSummaryResponse]:
-    check_shelf_warehouse_access(
-    current_user,
-    warehouse_id,
-)
+    _check_warehouse_access(current_user, warehouse_id)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -263,9 +261,7 @@ async def get_rack(
     current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> RackDetailsResponse:
-    
-    check_shelf_warehouse_access(current_user, warehouse_id)
-    
+    _check_warehouse_access(current_user, warehouse_id)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -377,7 +373,7 @@ async def create_shelf(
     current_user: dict = Depends(require_write),
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
-    check_shelf_warehouse_access(current_user, warehouse_id)
+    _check_warehouse_access(current_user, warehouse_id)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -404,8 +400,7 @@ async def update_shelf(
     current_user: dict = Depends(require_write),
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
-    check_shelf_warehouse_access(current_user, warehouse_id)
-    
+    _check_warehouse_access(current_user, warehouse_id)
     if data.model_dump(exclude_none=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -442,8 +437,7 @@ async def delete_shelf(
     current_user: dict = Depends(require_write),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
-    check_shelf_warehouse_access(current_user, warehouse_id)
-    
+    _check_warehouse_access(current_user, warehouse_id)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")

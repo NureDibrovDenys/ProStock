@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class WarehouseBase(BaseModel):
@@ -89,6 +89,15 @@ class WarehouseUpdate(BaseModel):
             stripped = v.strip()
             return stripped or None
         return v
+
+    @model_validator(mode="after")
+    def required_fields_not_null(self) -> "WarehouseUpdate":
+        # Оновлення бере лише передані поля (exclude_unset), тож явний null дійшов би до БД.
+        # Адресу null стирає, а назва й площа обов'язкові (NOT NULL).
+        for field in ("name", "total_area"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"Поле {field} не може бути null")
+        return self
 
 
 class WarehouseResponse(BaseModel):

@@ -20,6 +20,14 @@ export interface Warehouse {
   total_warehouse_area: number;
 }
 
+/** Тіло POST / PATCH /warehouses — бекенд приймає інші імена полів, ніж віддає. */
+export interface WarehouseInput {
+  name: string;
+  address: string | null;
+  /** Площа, м² (> 0). */
+  total_area: number;
+}
+
 // ── Мапа складу ───────────────────────────────────────────────────────────
 // Усі координати й розміри — у метрах. coord_x / coord_y — центр об'єкта.
 // length — розмір уздовж власної осі X об'єкта (до повороту), width — уздовж осі Y.

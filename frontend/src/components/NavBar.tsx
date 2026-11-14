@@ -1,19 +1,24 @@
-import { BookOpen, FileText, LogOut, Package, Users, Warehouse } from 'lucide-react';
+import { Building2, LogOut, Package, Users, Warehouse, BookOpen, FileText, LogOut, Package, Users, Warehouse } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { Permission } from '../api/types';
-import { ROLE_LABELS } from '../api/users';
+import { ROLE_LABELS, isAdminRole } from '../api/users';
 import { useAuth } from '../auth/AuthContext';
 import { cx } from '../lib/cx';
+import { CurrentWarehouseSelect } from './CurrentWarehouseSelect';
 import styles from './NavBar.module.css';
 
-/** Вкладка видима, якщо є хоча б одне з прав (null — для всіх). */
-type Tab = { to: string; label: string; end: boolean; permission: Permission[] | null };
+/**
+ * Вкладка видима, якщо є хоча б одне з прав (null — для всіх).
+ * adminOnly — лише root / administrator (окремого права на склади бекенд не віддає).
+ */
+type Tab = { to: string; label: string; end: boolean; permission: Permission[] | null; adminOnly?: boolean };
 
 const TABS: Tab[] = [
   { to: '/products', label: 'Товари', end: false, permission: ['products_read'] },
   // Адміністратор бачить усіх співробітників, менеджер складу — комірників свого складу
   { to: '/employees', label: 'Співробітники', end: false, permission: ['users_manage', 'storekeepers_manage'] },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
+  { to: '/warehouses', label: 'Склади', end: true, permission: null, adminOnly: true },
   { to: '/directories', label: 'Довідники', end: false, permission: ['directories_manage'] },
   { to: '/orders', label: 'Накладні', end: false, permission: ['orders_manage'] },
 ];
@@ -27,8 +32,11 @@ export function NavBar() {
     navigate('/login', { replace: true });
   };
 
-  const visibleTabs = TABS.filter((tab) => !tab.permission || tab.permission.some(can));
   const user = session?.user;
+  const isAdmin = isAdminRole(user?.role);
+  const visibleTabs = TABS.filter(
+    (tab) => (!tab.adminOnly || isAdmin) && (!tab.permission || tab.permission.some(can)),
+  );
 
   return (
     <header className={styles.bar}>
@@ -47,6 +55,7 @@ export function NavBar() {
             {tab.to === '/employees' && <Users size={16} aria-hidden />}
             {tab.to === '/warehouse' && <Warehouse size={16} aria-hidden />}
             {tab.to === '/products' && <Package size={16} aria-hidden />}
+            {tab.to === '/warehouses' && <Building2 size={16} aria-hidden />}
             {tab.to === '/directories' && <BookOpen size={16} aria-hidden />}
             {tab.to === '/orders' && <FileText size={16} aria-hidden />}
             {tab.label}
@@ -54,6 +63,7 @@ export function NavBar() {
         ))}
       </nav>
       <div className={styles.spacer} />
+      {isAdmin && <CurrentWarehouseSelect />}
       {user ? (
         <div className={styles.user}>
           <div className={styles.userInfo}>

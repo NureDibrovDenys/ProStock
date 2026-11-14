@@ -50,6 +50,9 @@ export const assignUserWarehouse = (
 /** DELETE /api/v1/users/{id} */
 export const deleteUser = (userId: number) => request<void>(`/users/${userId}`, { method: 'DELETE' });
 
+/** Адміністратори не прив'язані до складу й керують усіма складами. */
+export const isAdminRole = (role: string | undefined) => role === 'root' || role === 'administrator';
+
 export const ROLE_LABELS: Record<RoleName | 'guest', string> = {
   root: 'Root',
   administrator: 'Адміністратор',
