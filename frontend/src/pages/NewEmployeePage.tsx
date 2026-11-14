@@ -6,13 +6,13 @@ import { toast } from 'react-toastify';
 import { ApiError } from '../api/client';
 import type { NewStorekeeper, RoleName, User } from '../api/types';
 import { ROLE_LABELS, createStorekeeper, createUser, getStorekeeper, updateStorekeeper } from '../api/users';
-import { getWarehouses } from '../api/warehouse';
 import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
+import { WarehouseFormModal } from '../components/WarehouseFormModal';
 import { ErrorState, LoadingState } from '../components/ui';
-import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
+import { useCurrentWarehouse, useWarehouses } from '../hooks/useCurrentWarehouse';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { validateEmail, validateNewPassword } from '../lib/validation';
 import styles from './NewEmployeePage.module.css';
@@ -36,9 +36,15 @@ const ROLE_HINTS: Partial<Record<RoleName, string>> = {
   storekeeper: 'Перегляд каталогу та експорт; змінювати товари не може.',
 };
 
+/** Адміністратор не прив'язується до складу; комірник без складу працювати не може (бекенд відхилить). */
+const roleUsesWarehouse = (role: RoleName) => role !== 'administrator' && role !== 'root';
+
 /** passwordOptional — під час редагування порожній пароль означає «не змінювати». */
-function validate(form: FormState, { passwordOptional = false } = {}): Errors {
+function validate(form: FormState, { passwordOptional = false, chooseWarehouse = false } = {}): Errors {
   const errors: Errors = {};
+  if (chooseWarehouse && form.role === 'storekeeper' && form.warehouse_id === null) {
+    errors.warehouse_id = 'Комірника потрібно призначити на склад';
+  }
   if (!form.first_name.trim()) errors.first_name = "Вкажіть ім'я";
   if (!form.last_name.trim()) errors.last_name = 'Вкажіть прізвище';
 
@@ -95,14 +101,26 @@ export function NewEmployeePage() {
 
   const defaultWarehouseId = useCurrentWarehouse();
   const ownWarehouseName = useWarehouseName();
-  const warehousesQuery = useQuery({
-    queryKey: ['warehouses'],
-    queryFn: getWarehouses,
-    enabled: !isManagerMode,
-  });
+  const warehousesQuery = useWarehouses(!isManagerMode);
+  const [creatingWarehouse, setCreatingWarehouse] = useState(false);
 
-  const [form, setForm] = useState<FormState>(() => emptyForm(isManagerMode ? defaultWarehouseId : null));
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultWarehouseId));
   const [errors, setErrors] = useState<Errors>({});
+
+  // Адміністратор: за замовчуванням — поточний склад із перемикача (список складів може прийти пізніше)
+  const warehouseTouched = useRef(false);
+  useEffect(() => {
+    if (!isManagerMode && !warehouseTouched.current && defaultWarehouseId !== null) {
+      setForm((prev) => (prev.warehouse_id === null ? { ...prev, warehouse_id: defaultWarehouseId } : prev));
+    }
+  }, [isManagerMode, defaultWarehouseId]);
+
+  const chooseWarehouse = (warehouseId: number | null) => {
+    warehouseTouched.current = true;
+    setForm((prev) => ({ ...prev, warehouse_id: warehouseId }));
+    setErrors((prev) => ({ ...prev, warehouse_id: undefined }));
+    mutation.reset();
+  };
 
   const storekeeperQuery = useQuery({
     queryKey: ['users', 'storekeeper', editId],
@@ -152,7 +170,7 @@ export function NewEmployeePage() {
       };
       return isManagerMode
         ? createStorekeeper(base)
-        : createUser({ ...base, role: data.role, warehouse_id: data.warehouse_id });
+        : createUser({ ...base, role: data.role, warehouse_id: roleUsesWarehouse(data.role) ? data.warehouse_id : null });
     },
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -184,7 +202,7 @@ export function NewEmployeePage() {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (mutation.isPending || managerWithoutWarehouse) return;
-    const nextErrors = validate(form, { passwordOptional: isEdit });
+    const nextErrors = validate(form, { passwordOptional: isEdit, chooseWarehouse: !isManagerMode });
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
     if (isEdit && Object.keys(changesFrom(form)).length === 0) {
@@ -308,39 +326,34 @@ export function NewEmployeePage() {
             }
             hint="Комірник отримає доступ лише до вашого складу"
           />
-        ) : (
-          <Select
-            label="Склад"
-            value={form.warehouse_id === null ? '' : String(form.warehouse_id)}
-            onChange={(event) => {
-              const value = event.target.value;
-
-              setForm((prev) => ({
-                ...prev,
-                warehouse_id: value === '' ? null : Number(value),
-              }));
-
-              setErrors((prev) => ({
-                ...prev,
-                warehouse_id: undefined,
-              }));
-
-              mutation.reset();
-            }}
-            disabled={warehousesQuery.isPending || warehousesQuery.isError}
-            error={errors.warehouse_id}
-          >
-            <option value="">Без складу</option>
-
-            {warehousesQuery.data?.map((warehouse) => (
-              <option
-                key={warehouse.warehouse_id}
-                value={String(warehouse.warehouse_id)}
-              >
-                {warehouse.warehouse_name}
+        ) : roleUsesWarehouse(form.role) ? (
+          <div className={styles.warehouseField}>
+            <Select
+              label={form.role === 'storekeeper' ? 'Склад *' : 'Склад'}
+              value={form.warehouse_id === null ? '' : String(form.warehouse_id)}
+              onChange={(event) => chooseWarehouse(event.target.value === '' ? null : Number(event.target.value))}
+              disabled={warehousesQuery.isPending || warehousesQuery.isError}
+              error={errors.warehouse_id}
+            >
+              {/* Менеджера можна призначити пізніше; комірник без складу не працює */}
+              <option value="" disabled={form.role === 'storekeeper'}>
+                {warehousesQuery.isPending ? 'Завантаження…' : form.role === 'storekeeper' ? 'Оберіть склад' : 'Без складу'}
               </option>
-            ))}
-          </Select>
+              {warehousesQuery.data?.map((warehouse) => (
+                <option key={warehouse.warehouse_id} value={String(warehouse.warehouse_id)}>
+                  {warehouse.warehouse_name}
+                </option>
+              ))}
+            </Select>
+            <button type="button" className={styles.newWarehouse} onClick={() => setCreatingWarehouse(true)}>
+              + Новий склад
+            </button>
+            {warehousesQuery.data?.length === 0 && (
+              <p className={styles.warehouseHint}>Складів ще немає — створіть перший, щоб призначити на нього співробітника.</p>
+            )}
+          </div>
+        ) : (
+          <Input label="Склад" value="Усі склади" readOnly disabled hint="Адміністратор не прив'язаний до складу" />
         )}
 
         <div className={styles.roleHint}>{ROLE_HINTS[role]}</div>
@@ -370,6 +383,13 @@ export function NewEmployeePage() {
           </Button>
         </div>
       </form>
+      {/* Поза формою співробітника: submit модалки не повинен відправляти її */}
+      {creatingWarehouse && (
+        <WarehouseFormModal
+          onClose={() => setCreatingWarehouse(false)}
+          onSaved={(saved) => chooseWarehouse(saved.warehouse_id)}
+        />
+      )}
     </div>
   );
 }

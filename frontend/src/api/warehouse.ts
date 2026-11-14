@@ -1,11 +1,18 @@
 import { request } from './client';
-import type { DashboardStats, RackDetails, RackSummary, Warehouse, WarehouseMap } from './types';
+import type { DashboardStats, RackDetails, RackSummary, Warehouse, WarehouseInput, WarehouseMap } from './types';
 
 /** GET /api/v1/warehouses/{id} */
 export const getWarehouse = (warehouseId: number) => request<Warehouse>(`/warehouses/${warehouseId}`);
 
-/** GET /api/v1/warehouses — доступні склади для прив'язки облікового запису. */
+/** GET /api/v1/warehouses — усі склади (лише root / administrator). */
 export const getWarehouses = () => request<Warehouse[]>('/warehouses');
+
+/** POST /api/v1/warehouses — створення складу (лише root / administrator). */
+export const createWarehouse = (data: WarehouseInput) => request<Warehouse>('/warehouses', { method: 'POST', body: data });
+
+/** PATCH /api/v1/warehouses/{id} — зміна назви, адреси чи площі (лише root / administrator). */
+export const updateWarehouse = (warehouseId: number, data: Partial<WarehouseInput>) =>
+  request<Warehouse>(`/warehouses/${warehouseId}`, { method: 'PATCH', body: data });
 
 /** GET /api/v1/warehouses/{id}/map */
 export async function getWarehouseMap(warehouseId: number): Promise<WarehouseMap> {
