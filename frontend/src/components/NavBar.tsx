@@ -1,4 +1,4 @@
-import { Building2, LogOut, Package, Users, Warehouse } from 'lucide-react';
+import { Building2, LogOut, Package, Users, Warehouse, BookOpen, FileText, LogOut, Package, Users, Warehouse } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { Permission } from '../api/types';
 import { ROLE_LABELS, isAdminRole } from '../api/users';
@@ -19,6 +19,8 @@ const TABS: Tab[] = [
   { to: '/employees', label: 'Співробітники', end: false, permission: ['users_manage', 'storekeepers_manage'] },
   { to: '/warehouse', label: 'Склад', end: false, permission: null },
   { to: '/warehouses', label: 'Склади', end: true, permission: null, adminOnly: true },
+  { to: '/directories', label: 'Довідники', end: false, permission: ['directories_manage'] },
+  { to: '/orders', label: 'Накладні', end: false, permission: ['orders_manage'] },
 ];
 
 export function NavBar() {
@@ -54,6 +56,8 @@ export function NavBar() {
             {tab.to === '/warehouse' && <Warehouse size={16} aria-hidden />}
             {tab.to === '/products' && <Package size={16} aria-hidden />}
             {tab.to === '/warehouses' && <Building2 size={16} aria-hidden />}
+            {tab.to === '/directories' && <BookOpen size={16} aria-hidden />}
+            {tab.to === '/orders' && <FileText size={16} aria-hidden />}
             {tab.label}
           </NavLink>
         ))}

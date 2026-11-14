@@ -277,6 +277,78 @@ export interface ImportReport {
   errors: ImportRowError[];
 }
 
+// ── Довідники: постачальники та одержувачі ────────────────────────────────
+
+export type CounterpartyKind = 'suppliers' | 'recipients';
+export type CounterpartyStatus = 'active' | 'inactive' | 'blocked';
+
+/** Постачальник або одержувач — поля спільні (моделі Supplier і Recipient). */
+export interface Counterparty {
+  id: number;
+  company_name: string;
+  /** ЄДРПОУ (8 цифр) або ІПН (10 цифр). */
+  tax_id: string | null;
+  contact_person: string | null;
+  phone_number: string | null;
+  email: string | null;
+  /** Для одержувача — адреса доставки (обов'язкова). */
+  address: string | null;
+  status: CounterpartyStatus;
+}
+
+export type CounterpartyInput = Omit<Counterparty, 'id' | 'status'>;
+
+// ── Накладні (backend/app/orders/schemas.py) ──────────────────────────────
+
+export type OrderStatus = 'draft' | 'in_progress' | 'ready' | 'completed' | 'canceled';
+
+/** Варіант пакування позиції (поле package_type, рядок до 30 символів). */
+export type PackageType = 'box' | 'pallet';
+
+export interface InboundOrderItem {
+  item_id: number;
+  product_id: number;
+  /** Decimal приходить рядком, наприклад "120.00". */
+  quantity: string;
+  package_type: string;
+}
+
+export interface InboundOrder {
+  inbound_order_id: number;
+  supplier_id: number;
+  /** № супровідного документа постачальника (унікальний). */
+  invoice_number: string;
+  expected_delivery_date: string;
+  order_status: OrderStatus;
+  created_by_user_id: number;
+  created_at: string;
+  items: InboundOrderItem[];
+}
+
+export interface InboundOrderItemPayload {
+  product_id: number;
+  quantity: number;
+  package_type: PackageType;
+}
+
+export interface InboundOrderPayload {
+  supplier_id: number;
+  invoice_number: string;
+  expected_delivery_date: string;
+  items: InboundOrderItemPayload[];
+}
+
+/** Результат перевірки вміщуваності партії (FR-4.9, FR-4.10). */
+export interface CapacityCheck {
+  fits: boolean;
+  /** Об'єм партії, м³. */
+  required_m3: number;
+  /** Вільний об'єм полиць складу зараз, м³. */
+  free_m3: number;
+  /** Загальна місткість полиць складу, м³. */
+  total_m3: number;
+}
+
 // ── Авторизація ───────────────────────────────────────────────────────────
 
 export type Permission =
@@ -288,7 +360,11 @@ export type Permission =
   | 'users_manage'
   /** Менеджер складу: створення комірників свого складу. */
   | 'storekeepers_manage'
-  | 'warehouse_map_write';
+  | 'warehouse_map_write'
+  /** Адміністратор і менеджер складу: довідники постачальників та одержувачів. */
+  | 'directories_manage'
+  /** Адміністратор і менеджер складу: прихідні та вихідні накладні. */
+  | 'orders_manage';
 
 export interface AuthUser {
   user_id: number;

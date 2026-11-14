@@ -24,6 +24,9 @@ export const getProducts = (query: ProductQuery) =>
     },
   });
 
+/** GET /api/v1/products/{id} */
+export const getProduct = (productId: number) => request<Product>(`${PRODUCTS}/${productId}`);
+
 /** POST /api/v1/products */
 export const createProduct = (payload: ProductPayload) =>
   request<Product>(PRODUCTS, { method: 'POST', body: payload });
