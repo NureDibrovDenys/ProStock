@@ -10,7 +10,6 @@ import { cx } from '../lib/cx';
 import { formatNumber, plural } from '../lib/format';
 import styles from './OrdersPage.module.css';
 
-const OUTBOUND_SOON = 'Вихідні накладні з’являться разом з API вихідних накладних';
 const FILTERS_SOON = 'Фільтри з’являться разом зі сторінкою списку накладних';
 
 const dateFormat = new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -42,7 +41,7 @@ export function OrdersPage() {
 
   const createButtons = (
     <>
-      <Button variant="secondary" disabled title={OUTBOUND_SOON}>
+      <Button variant="secondary" to="/orders/outbound/new">
         + Вихідна накладна
       </Button>
       <Button to="/orders/inbound/new">+ Прихідна накладна</Button>

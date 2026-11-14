@@ -11,6 +11,7 @@ import { LoginPage } from './pages/LoginPage';
 import { MapEditorPage } from './pages/MapEditorPage';
 import { NewEmployeePage } from './pages/NewEmployeePage';
 import { OrdersPage } from './pages/OrdersPage';
+import { OutboundOrderFormPage } from './pages/OutboundOrderFormPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { RackPage } from './pages/RackPage';
 import { WarehousePage } from './pages/WarehousePage';
@@ -105,6 +106,22 @@ export function App() {
             element={
               <RequirePermission permission="orders_manage">
                 <InboundOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/orders/outbound/new"
+            element={
+              <RequirePermission permission="orders_manage">
+                <OutboundOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/orders/outbound/:id/edit"
+            element={
+              <RequirePermission permission="orders_manage">
+                <OutboundOrderFormPage />
               </RequirePermission>
             }
           />

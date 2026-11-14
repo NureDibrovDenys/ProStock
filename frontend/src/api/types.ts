@@ -330,6 +330,39 @@ export interface InboundOrderPayload {
   items: InboundOrderItemPayload[];
 }
 
+/**
+ * Вихідна накладна (модель OutboundOrder). API ще немає — контракт запропонований фронтендом:
+ * поля як у прихідній, але одержувач замість постачальника, а invoice_number присвоює бекенд.
+ */
+export interface OutboundOrder {
+  outbound_order_id: number;
+  recipient_id: number;
+  /** Номер накладної, присвоєний автоматично (унікальний). */
+  invoice_number: string;
+  planned_shipment_date: string;
+  order_status: OrderStatus;
+  created_by_user_id: number;
+  created_at: string;
+  items: OutboundOrderItem[];
+}
+
+/** Рядок вихідної накладної — та сама форма, що й у прихідної. */
+export type OutboundOrderItem = InboundOrderItem;
+export type OutboundOrderItemPayload = InboundOrderItemPayload;
+
+export interface OutboundOrderPayload {
+  recipient_id: number;
+  planned_shipment_date: string;
+  items: OutboundOrderItemPayload[];
+}
+
+/** Доступний залишок товару на поточному складі, в одиницях виміру товару. */
+export interface StockLevel {
+  product_id: number;
+  /** Decimal рядком, наприклад "340.00". */
+  available: string;
+}
+
 /** Результат перевірки вміщуваності партії (FR-4.9, FR-4.10). */
 export interface CapacityCheck {
   fits: boolean;

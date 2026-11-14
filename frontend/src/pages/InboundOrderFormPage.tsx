@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Check, Loader, Lock, Pencil, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ApiError } from '../api/client';
@@ -31,7 +31,15 @@ import { ErrorState, LoadingState } from '../components/ui';
 import { useWarehouseName } from '../hooks/useWarehouse';
 import { cx } from '../lib/cx';
 import { plural } from '../lib/format';
-import styles from './InboundOrderFormPage.module.css';
+import styles from './OrderForm.module.css';
+import {
+  Field,
+  QUANTITY_PATTERN,
+  fromDateInput,
+  parseQuantity,
+  quantityToInput,
+  toDateInput,
+} from './orderFormShared';
 
 // ── Стан форми ────────────────────────────────────────────────────────────
 
@@ -57,19 +65,10 @@ type Capacity =
 
 const NO_ERRORS: Errors = { lines: {} };
 const PACKAGES: PackageType[] = ['box', 'pallet'];
-const QUANTITY_PATTERN = /^\d{1,8}([.,]\d{1,2})?$/;
 const POST_SOON = 'Проведення накладної — окрема задача беклогу, кнопка запрацює разом з API проведення';
 
 let nextKey = 1;
 const emptyLine = (): Line => ({ key: nextKey++, product: null, quantity: '', packageType: 'box' });
-
-const parseQuantity = (value: string) => Number(value.trim().replace(',', '.'));
-
-// ── Дати: бекенд зберігає timestamptz, у формі — локальна дата yyyy-mm-dd ──
-
-const pad = (n: number) => String(n).padStart(2, '0');
-const toDateInput = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const fromDateInput = (value: string) => new Date(`${value}T00:00:00`).toISOString();
 
 // ── Розрахунок об'єму та ваги з габаритів товару (м, кг) ───────────────────
 
@@ -202,7 +201,7 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
       ? order.items.map((item) => ({
           key: nextKey++,
           product: products.find((p) => p.product_id === item.product_id) ?? null,
-          quantity: String(Number(item.quantity)).replace('.', ','),
+          quantity: quantityToInput(item.quantity),
           packageType: item.package_type === 'pallet' ? 'pallet' : 'box',
         }))
       : [emptyLine()],
@@ -650,42 +649,6 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
 }
 
 // ── Допоміжні компоненти ──────────────────────────────────────────────────
-
-function Field({
-  label,
-  htmlFor,
-  error,
-  hint,
-  wide,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  error?: string;
-  hint?: string;
-  wide?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div className={cx(styles.field, wide && styles.wide)}>
-      {htmlFor ? (
-        <label htmlFor={htmlFor} className={styles.label}>
-          {label}
-        </label>
-      ) : (
-        <span className={styles.label}>{label}</span>
-      )}
-      {children}
-      {error ? (
-        <span className={styles.fieldError} role="alert">
-          <AlertTriangle size={13} aria-hidden /> {error}
-        </span>
-      ) : (
-        hint && <span className={styles.hint}>{hint}</span>
-      )}
-    </div>
-  );
-}
 
 function CapacityPanel({ capacity, required }: { capacity: Capacity; required: number }) {
   if (capacity.state === 'checking') {
