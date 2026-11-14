@@ -31,6 +31,9 @@ PRODUCT_READ_ROLES: frozenset[RoleName] = ALL_ROLES
 # Account management — root and admin
 USER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
+# Suppliers and recipients directories — admins and  managers
+DIRECTORY_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+  
 # Creating storekeepers of own warehouse — warehouse manager
 # (admins create any accounts via 'users_manage')
 STOREKEEPER_MANAGE_ROLES: frozenset[RoleName] = frozenset({RoleName.WAREHOUSE_MANAGER})
