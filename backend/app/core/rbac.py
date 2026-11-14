@@ -41,6 +41,9 @@ STOREKEEPER_MANAGE_ROLES: frozenset[RoleName] = frozenset({RoleName.WAREHOUSE_MA
 # Editing map of a warehouse — only admin
 WAREHOUSE_MAP_WRITE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
+# Suppliers and recipients directories — admins and  managers
+DIRECTORY_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+
 def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
     """
     Return a list of capabilities for a role (for the UI).

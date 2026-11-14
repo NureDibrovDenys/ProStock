@@ -98,7 +98,7 @@ async def test_map_write_permission_only_for_admin(client: AsyncClient):
     assert manager_me["permissions"]["products_write"] is True
     assert manager_me["permissions"]["storekeepers_manage"] is True
     assert manager_me["permissions"]["users_manage"] is False
-    assert manager_me["permissions"]["directories_manage"] is True    
+    assert manager_me["permissions"]["directories_manage"] is True
 
     admin_token = await login(client, ADMIN)
     admin_me = (await client.get(f"{API}/auth/me", headers=auth(admin_token))).json()
