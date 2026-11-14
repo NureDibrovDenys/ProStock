@@ -6,9 +6,11 @@ import { CounterpartyFormPage } from './pages/CounterpartyFormPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DirectoriesPage } from './pages/DirectoriesPage';
 import { EmployeesPage } from './pages/EmployeesPage';
+import { InboundOrderFormPage } from './pages/InboundOrderFormPage';
 import { LoginPage } from './pages/LoginPage';
 import { MapEditorPage } from './pages/MapEditorPage';
 import { NewEmployeePage } from './pages/NewEmployeePage';
+import { OrdersPage } from './pages/OrdersPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { RackPage } from './pages/RackPage';
 import { WarehousePage } from './pages/WarehousePage';
@@ -78,6 +80,31 @@ export function App() {
             element={
               <RequirePermission permission="directories_manage">
                 <CounterpartyFormPage />
+              </RequirePermission>
+            }
+          />
+          {/* Накладні */}
+          <Route
+            path="/orders"
+            element={
+              <RequirePermission permission="orders_manage">
+                <OrdersPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/orders/inbound/new"
+            element={
+              <RequirePermission permission="orders_manage">
+                <InboundOrderFormPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/orders/inbound/:id/edit"
+            element={
+              <RequirePermission permission="orders_manage">
+                <InboundOrderFormPage />
               </RequirePermission>
             }
           />
