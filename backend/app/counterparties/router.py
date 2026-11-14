@@ -211,7 +211,13 @@ async def update_recipient(
 @recipients_router.delete("/{recipient_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_recipient(recipient_id: int, session: AsyncSession = Depends(get_async_session)):
     recipient = await get_recipient_or_404(session, recipient_id)
-                                                                    # Коли з'являться вихідні накладні — забороняти видалення одержувача,
-                                                                    # на якого вони посилаються, і пропонувати статус inactive (архів).
+    if await crud.recipient_has_outbound_orders(session, recipient.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Одержувача не можна видалити: на нього посилаються вихідні накладні. "
+                "Замість видалення переведіть його в статус inactive (архів)."
+            ),
+        )
     await crud.delete_recipient(session, recipient)
     return None

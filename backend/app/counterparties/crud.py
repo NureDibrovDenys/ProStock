@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import SupplierStatus, RecipientStatus
 from app.counterparties.schemas import SupplierCreate, SupplierUpdate, RecipientCreate, RecipientUpdate
 from app.products.models import Supplier, Recipient
-from app.orders.models import InboundOrder
+from app.orders.models import InboundOrder, OutboundOrder
 
 
 # Постачальники ──────────────────────────────────────────────────────────
@@ -149,6 +149,11 @@ async def update_recipient(
     await session.refresh(recipient)
     return recipient
 
+async def recipient_has_outbound_orders(session: AsyncSession, recipient_id: int) -> bool:
+    has_orders = await session.scalar(
+        select(exists().where(OutboundOrder.recipient_id == recipient_id))
+    )
+    return bool(has_orders)
 
 async def delete_recipient(session: AsyncSession, recipient: Recipient) -> None:
     await session.delete(recipient)
