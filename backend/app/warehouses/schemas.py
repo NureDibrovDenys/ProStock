@@ -153,10 +153,10 @@ class ShelfCreate(BaseModel):
     """Тіло запиту для створення нової полиці."""
 
     code: str = Field(..., max_length=50, description="Код полиці (унікальний у стелажі)")
-    width: _Decimal = Field(..., gt=0, decimal_places=2)
-    length: _Decimal = Field(..., gt=0, decimal_places=2)
-    height: _Decimal = Field(..., gt=0, decimal_places=2)
-    max_weight: _Decimal = Field(..., gt=0, decimal_places=3)
+    width: _Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+    length: _Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+    height: _Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+    max_weight: _Decimal = Field(..., gt=0, max_digits=10, decimal_places=3)
     status: ShelfStatus = ShelfStatus.ACTIVE
     inactive_reason: InactiveReason | None = None
 
@@ -172,10 +172,10 @@ class ShelfCreate(BaseModel):
 class ShelfUpdate(BaseModel):
     """Тіло запиту для часткового оновлення полиці (всі поля необов'язкові)."""
 
-    width: _Decimal | None = Field(default=None, gt=0)
-    length: _Decimal | None = Field(default=None, gt=0)
-    height: _Decimal | None = Field(default=None, gt=0)
-    max_weight: _Decimal | None = Field(default=None, gt=0)
+    width: _Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
+    length: _Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
+    height: _Decimal | None = Field(default=None, gt=0,max_digits=8, decimal_places=2)
+    max_weight: _Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=3)
     status: ShelfStatus | None = None
     inactive_reason: InactiveReason | None = None
 

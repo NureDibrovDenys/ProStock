@@ -58,6 +58,28 @@ def _to_response(warehouse) -> WarehouseResponse:
     )
 
 
+
+
+def check_shelf_warehouse_access(
+    current_user: dict,
+    warehouse_id: int,
+) -> None:
+    """Перевіряє право користувача працювати з конкретним складом."""
+
+    admin_roles = {role.value for role in ADMIN_ROLES}
+
+    #адміністратори мають доступ до всіх складів
+    if current_user["role"] in admin_roles:
+        return
+
+    #решта користувачів  тільки до призначеного складу
+    if current_user.get("warehouse_id") != warehouse_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="У вас немає доступу до цього складу",
+        )
+
+
 # ── READ ─────────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -257,6 +279,87 @@ async def get_rack(
 
 # ── Shelf endpoints ───────────────────────────────────────────────────────────
 
+
+@router.get(
+    "/{warehouse_id}/racks/{rack_code}/shelves",
+    response_model=list[ShelfResponse],
+    summary="Отримати всі полиці стелажа",
+)
+async def list_shelves(
+    warehouse_id: int,
+    rack_code: str,
+    current_user: dict = Depends(require_authenticated),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[ShelfResponse]:
+    check_shelf_warehouse_access(current_user, warehouse_id)
+
+    warehouse = await crud.get_warehouse(session, warehouse_id)
+
+    if warehouse is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Склад не знайдено"
+        )
+
+    rack = await crud.get_rack_by_code(
+        session, warehouse_id, rack_code
+    )
+
+    if rack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Стелаж не знайдено"
+        )
+
+    shelves = await crud.get_shelves_by_rack(session, rack.id)
+
+    return [_shelf_to_response(shelf) for shelf in shelves]
+
+
+@router.get(
+    "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",
+    response_model=ShelfResponse,
+    summary="Отримати полицю за ID",
+)
+async def get_shelf(
+    warehouse_id: int,
+    rack_code: str,
+    shelf_id: int,
+    current_user: dict = Depends(require_authenticated),
+    session: AsyncSession = Depends(get_async_session),
+) -> ShelfResponse:
+    check_shelf_warehouse_access(current_user, warehouse_id)
+
+    warehouse = await crud.get_warehouse(session, warehouse_id)
+
+    if warehouse is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Склад не знайдено",
+        )
+
+    rack = await crud.get_rack_by_code(
+        session, warehouse_id, rack_code
+    )
+
+    if rack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Стелаж не знайдено",
+        )
+
+    shelf = await crud.get_shelf(session, shelf_id)
+
+    if shelf is None or shelf.rack_id != rack.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Полицю не знайдено",
+        )
+
+    return _shelf_to_response(shelf)
+
+
+
 @router.post(
     "/{warehouse_id}/racks/{rack_code}/shelves",
     response_model=ShelfResponse,
@@ -312,7 +415,13 @@ async def update_shelf(
     shelf = await crud.get_shelf(session, shelf_id)
     if shelf is None or shelf.rack_id != rack.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Полицю не знайдено")
-    shelf = await crud.update_shelf(session, shelf, data)
+    try:
+        shelf = await crud.update_shelf(session, shelf, data)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail = str(exc),
+        )from exc
     return _shelf_to_response(shelf)
 
 
@@ -338,4 +447,11 @@ async def delete_shelf(
     shelf = await crud.get_shelf(session, shelf_id)
     if shelf is None or shelf.rack_id != rack.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Полицю не знайдено")
-    await crud.delete_shelf(session, shelf)
+    
+    try:
+        await crud.delete_shelf(session, shelf)
+    except ValueError as exc:
+        raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=str(exc),
+    ) from exc
