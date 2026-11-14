@@ -14,6 +14,7 @@ from app.users.router import router as users_router
 from app.warehouses.router import router as warehouses_router
 from app.managers.router import router as managers_router
 from app.counterparties.router import suppliers_router, recipients_router
+from app.orders.router import router as inbound_orders_router
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
@@ -62,6 +63,7 @@ app.include_router(categories_router)
 app.include_router(managers_router)
 app.include_router(suppliers_router)
 app.include_router(recipients_router)
+app.include_router(inbound_orders_router)
 
 
 @app.get("/")
