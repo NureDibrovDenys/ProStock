@@ -14,11 +14,21 @@ type Props = {
   onChange: (product: Product | null) => void;
   invalid?: boolean;
   disabled?: boolean;
+  /** Товари, які не можна обрати (вже є в інших рядках) — показуються неактивними з поясненням. */
+  isTaken?: (product: Product) => boolean;
+  takenLabel?: string;
   'aria-label'?: string;
 };
 
-/** Пошук товару в каталозі за SKU або назвою з випадним списком. */
-export function ProductPicker({ value, onChange, invalid, disabled, 'aria-label': ariaLabel }: Props) {
+export function ProductPicker({
+  value,
+  onChange,
+  invalid,
+  disabled,
+  isTaken,
+  takenLabel = 'уже додано',
+  'aria-label': ariaLabel,
+}: Props) {
   const listId = useId();
   const [text, setText] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -36,6 +46,7 @@ export function ProductPicker({ value, onChange, invalid, disabled, 'aria-label'
   const options = query.data?.items ?? [];
 
   const choose = (product: Product) => {
+    if (isTaken?.(product)) return;
     onChange(product);
     setText(null);
     setOpen(false);
@@ -92,23 +103,28 @@ export function ProductPicker({ value, onChange, invalid, disabled, 'aria-label'
           {query.isPending && <li className={styles.note}>Пошук…</li>}
           {query.isError && <li className={styles.note}>Не вдалося завантажити товари</li>}
           {query.data && options.length === 0 && <li className={styles.note}>Нічого не знайдено</li>}
-          {options.map((product, index) => (
-            <li
-              key={product.product_id}
-              role="option"
-              aria-selected={index === active}
-              className={cx(styles.option, index === active && styles.optionActive)}
-              // mousedown, щоб вибір спрацював раніше за blur поля
-              onMouseDown={(event) => {
-                event.preventDefault();
-                choose(product);
-              }}
-              onMouseEnter={() => setActive(index)}
-            >
-              <span className={styles.sku}>{product.sku_code}</span>
-              {product.name}
-            </li>
-          ))}
+          {options.map((product, index) => {
+            const taken = isTaken?.(product) ?? false;
+            return (
+              <li
+                key={product.product_id}
+                role="option"
+                aria-selected={index === active}
+                aria-disabled={taken || undefined}
+                className={cx(styles.option, index === active && styles.optionActive, taken && styles.optionTaken)}
+                // mousedown, щоб вибір спрацював раніше за blur поля
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  choose(product);
+                }}
+                onMouseEnter={() => setActive(index)}
+              >
+                <span className={styles.sku}>{product.sku_code}</span>
+                {product.name}
+                {taken && <span className={styles.takenNote}>{takenLabel}</span>}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

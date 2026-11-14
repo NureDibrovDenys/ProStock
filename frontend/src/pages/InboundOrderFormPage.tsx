@@ -53,10 +53,7 @@ type Errors = {
 };
 
 type Capacity =
-  | { state: 'idle' }
-  | { state: 'checking' }
-  | { state: 'unavailable' }
-  | { state: 'done'; result: CapacityCheck };
+  { state: 'idle' } | { state: 'checking' } | { state: 'unavailable' } | { state: 'done'; result: CapacityCheck };
 
 const NO_ERRORS: Errors = { lines: {} };
 const PACKAGES: PackageType[] = ['box', 'pallet'];
@@ -132,7 +129,8 @@ function validate(header: HeaderFields, lines: Line[], checkPastDate: boolean): 
   if (!invoice) errors.invoiceNumber = 'Вкажіть номер документа постачальника';
   else if (invoice.length > 50) errors.invoiceNumber = 'Не більше 50 символів';
   if (!header.date) errors.date = 'Вкажіть дату поставки';
-  else if (checkPastDate && header.date < toDateInput(new Date())) errors.date = 'Дата поставки не може бути в минулому';
+  else if (checkPastDate && header.date < toDateInput(new Date()))
+    errors.date = 'Дата поставки не може бути в минулому';
   return errors;
 }
 
@@ -212,8 +210,13 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
   const [errors, setErrors] = useState<Errors>(NO_ERRORS);
   const [capacity, setCapacity] = useState<Capacity>({ state: 'idle' });
 
-  const suppliersQuery = useQuery({ queryKey: ['directories', 'suppliers'], queryFn: () => getCounterparties('suppliers') });
-  const suppliers = suppliersQuery.data ?? [];
+  const suppliersQuery = useQuery({
+    queryKey: ['directories', 'suppliers'],
+    queryFn: () => getCounterparties('suppliers'),
+  });
+  const suppliers = (suppliersQuery.data ?? []).filter(
+    (s) => s.status === 'active' || (order !== null && s.id === order.supplier_id),
+  );
 
   const totals = useMemo(() => {
     let volume = 0;
@@ -227,6 +230,25 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
     }
     return { volume, weight };
   }, [lines]);
+
+  // Рядки, що повторюють пару «товар + пакування» з рядка вище, — підсвічуються одразу, без збереження
+  const duplicateKeys = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicates = new Set<number>();
+    for (const line of lines) {
+      if (!line.product) continue;
+      const id = `${line.product.product_id}:${line.packageType}`;
+      if (seen.has(id)) duplicates.add(line.key);
+      seen.add(id);
+    }
+    return duplicates;
+  }, [lines]);
+
+  const isTakenFor = (line: Line) => (product: Product) =>
+    lines.some(
+      (other) =>
+        other.key !== line.key && other.product?.product_id === product.product_id && other.packageType === line.packageType,
+    );
 
   // Будь-яка зміна позицій робить попередню перевірку вміщуваності неактуальною
   useEffect(() => {
@@ -390,7 +412,12 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
               <Field label="Постачальник *" htmlFor="supplier" error={errors.supplier} wide>
                 <select
                   id="supplier"
-                  className={cx(styles.control, styles.select, errors.supplier && styles.invalid, !header.supplierId && styles.placeholder)}
+                  className={cx(
+                    styles.control,
+                    styles.select,
+                    errors.supplier && styles.invalid,
+                    !header.supplierId && styles.placeholder,
+                  )}
                   value={header.supplierId}
                   onChange={(event) => setField('supplierId', event.target.value)}
                   disabled={readOnly}
@@ -439,7 +466,12 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                 />
               </Field>
 
-              <Field label="Примітка" htmlFor="note" hint="Поки не зберігається: у бекенді накладної ще немає цього поля" wide>
+              <Field
+                label="Примітка"
+                htmlFor="note"
+                hint="Поки не зберігається: у бекенді накладної ще немає цього поля"
+                wide
+              >
                 <textarea
                   id="note"
                   className={cx(styles.control, styles.textarea)}
@@ -467,7 +499,14 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
               </div>
 
               {lines.map((line, index) => {
-                const lineErrors = errors.lines[line.key] ?? {};
+                const lineErrors: LineErrors = {
+                  ...errors.lines[line.key],
+                  product:
+                    errors.lines[line.key]?.product ??
+                    (duplicateKeys.has(line.key)
+                      ? `Уже є в накладній з пакуванням «${PACKAGE_LABELS[line.packageType]}» — збільште кількість у тому рядку`
+                      : undefined),
+                };
                 const t = lineTotals(line);
                 return (
                   <div key={line.key} className={styles.line} role="row">
@@ -477,6 +516,8 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                         onChange={(product) => updateLine(line.key, { product })}
                         invalid={Boolean(lineErrors.product)}
                         disabled={readOnly}
+                        isTaken={isTakenFor(line)}
+                        takenLabel={`уже в накладній (${PACKAGE_LABELS[line.packageType].toLowerCase()})`}
                         aria-label={`Товар, позиція ${index + 1}`}
                       />
                       {lineErrors.product && <span className={styles.cellError}>{lineErrors.product}</span>}
@@ -496,7 +537,9 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                     </div>
                     <div className={styles.cell} role="cell" data-label="Од. виміру">
                       <span className={cx(styles.readout, styles.small)} title="Одиниця виміру товару з каталогу">
-                        {line.product ? UNIT_LABELS[line.product.unit_of_measure] ?? line.product.unit_of_measure : '—'}
+                        {line.product
+                          ? (UNIT_LABELS[line.product.unit_of_measure] ?? line.product.unit_of_measure)
+                          : '—'}
                       </span>
                     </div>
                     <div className={styles.cell} role="cell" data-label="Пакування">
@@ -516,10 +559,14 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                       </div>
                     </div>
                     <div className={styles.cell} role="cell" data-label="Об'єм, м³">
-                      <span className={cx(styles.readout, styles.small)}>{t ? volumeFormat.format(t.volume) : '—'}</span>
+                      <span className={cx(styles.readout, styles.small)}>
+                        {t ? volumeFormat.format(t.volume) : '—'}
+                      </span>
                     </div>
                     <div className={styles.cell} role="cell" data-label="Вага, кг">
-                      <span className={cx(styles.readout, styles.small)}>{t ? weightFormat.format(t.weight) : '—'}</span>
+                      <span className={cx(styles.readout, styles.small)}>
+                        {t ? weightFormat.format(t.weight) : '—'}
+                      </span>
                     </div>
                     <div className={styles.cell} role="cell">
                       <button
@@ -553,7 +600,9 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
                 {volumeFormat.format(totals.volume)} м³ · {weightFormat.format(totals.weight)} кг
               </span>
             </div>
-            <p className={styles.footnote}>Об'єм і вага позиції рахуються автоматично з габаритів у довіднику товарів.</p>
+            <p className={styles.footnote}>
+              Об'єм і вага позиції рахуються автоматично з габаритів у довіднику товарів.
+            </p>
           </section>
         </div>
 
@@ -575,7 +624,11 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
               <Lock size={13} aria-hidden /> Недостатньо місця на складі
             </span>
           )}
-          <Button variant="secondary" onClick={handleCheckCapacity} disabled={readOnly || capacity.state === 'checking'}>
+          <Button
+            variant="secondary"
+            onClick={handleCheckCapacity}
+            disabled={readOnly || capacity.state === 'checking'}
+          >
             Перевірити вміщуваність
           </Button>
           <Button type="submit" variant="secondary" disabled={readOnly || saveMutation.isPending}>
