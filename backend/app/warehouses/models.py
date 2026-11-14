@@ -709,7 +709,6 @@ class Shelf(Base):
     code: Mapped[str] = mapped_column(
         "shelf_code",
         String(50),
-        unique=True,
         nullable=False
     )
     qr: Mapped[str] = mapped_column(
@@ -785,6 +784,11 @@ class Shelf(Base):
             "shelf_max_weight > 0",
             name="check_shelf_max_weight_min",
         ),
+        UniqueConstraint(
+            "rack_id",
+            "shelf_code",
+            name = "uq_shelf_rack_code"
+        )
     )
     
     @validates("width")

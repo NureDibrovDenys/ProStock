@@ -154,7 +154,7 @@ async def create_shelf(
     if existing is not None:
         raise ValueError(f"Полиця з кодом '{data.code}' вже існує в стелажі '{rack.code}'")
 
-    qr = f"{rack.code}-{data.code}"
+    qr = f"R{rack.code}-{data.code}"
     shelf = Shelf(
         rack_id=rack.id,
         code=data.code,
@@ -198,5 +198,8 @@ async def update_shelf(
 
 async def delete_shelf(session: AsyncSession, shelf: Shelf) -> None:
     """Видаляє полицю."""
+    
+    if shelf.is_occupied:
+        raise ValueError("Неможливо видалити зайняту полицю")
     await session.delete(shelf)
     await session.commit()

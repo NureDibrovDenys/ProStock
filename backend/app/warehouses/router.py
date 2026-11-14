@@ -57,6 +57,28 @@ def _to_response(warehouse) -> WarehouseResponse:
     )
 
 
+
+
+def check_shelf_warehouse_access(
+    current_user: dict,
+    warehouse_id: int,
+) -> None:
+    """Перевіряє право користувача працювати з конкретним складом."""
+
+    admin_roles = {role.value for role in ADMIN_ROLES}
+
+    #адміністратори мають доступ до всіх складів
+    if current_user["role"] in admin_roles:
+        return
+
+    #решта користувачів  тільки до призначеного складу
+    if current_user.get("warehouse_id") != warehouse_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="У вас немає доступу до цього складу",
+        )
+
+
 # ── READ ─────────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -67,9 +89,11 @@ def _to_response(warehouse) -> WarehouseResponse:
 )
 async def get_warehouse(
     warehouse_id: int,
-    _: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> WarehouseResponse:
+    check_shelf_warehouse_access(current_user, warehouse_id)
+    
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -214,9 +238,13 @@ def _shelf_to_response(shelf) -> ShelfResponse:
 )
 async def list_racks(
     warehouse_id: int,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[RackSummaryResponse]:
+    check_shelf_warehouse_access(
+    current_user,
+    warehouse_id,
+)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -232,9 +260,12 @@ async def list_racks(
 async def get_rack(
     warehouse_id: int,
     rack_code: str,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> RackDetailsResponse:
+    
+    check_shelf_warehouse_access(current_user, warehouse_id)
+    
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -261,9 +292,10 @@ async def get_rack(
 async def list_shelves(
     warehouse_id: int,
     rack_code: str,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[ShelfResponse]:
+    check_shelf_warehouse_access(current_user, warehouse_id)
 
     warehouse = await crud.get_warehouse(session, warehouse_id)
 
@@ -297,9 +329,10 @@ async def get_shelf(
     warehouse_id: int,
     rack_code: str,
     shelf_id: int,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
+    check_shelf_warehouse_access(current_user, warehouse_id)
 
     warehouse = await crud.get_warehouse(session, warehouse_id)
 
@@ -341,9 +374,10 @@ async def create_shelf(
     warehouse_id: int,
     rack_code: str,
     data: ShelfCreate,
-    _: dict = Depends(require_write),
+    current_user: dict = Depends(require_write),
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
+    check_shelf_warehouse_access(current_user, warehouse_id)
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -367,9 +401,11 @@ async def update_shelf(
     rack_code: str,
     shelf_id: int,
     data: ShelfUpdate,
-    _: dict = Depends(require_write),
+    current_user: dict = Depends(require_write),
     session: AsyncSession = Depends(get_async_session),
 ) -> ShelfResponse:
+    check_shelf_warehouse_access(current_user, warehouse_id)
+    
     if data.model_dump(exclude_none=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -403,9 +439,11 @@ async def delete_shelf(
     warehouse_id: int,
     rack_code: str,
     shelf_id: int,
-    _: dict = Depends(require_write),
+    current_user: dict = Depends(require_write),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
+    check_shelf_warehouse_access(current_user, warehouse_id)
+    
     warehouse = await crud.get_warehouse(session, warehouse_id)
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
@@ -415,4 +453,11 @@ async def delete_shelf(
     shelf = await crud.get_shelf(session, shelf_id)
     if shelf is None or shelf.rack_id != rack.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Полицю не знайдено")
-    await crud.delete_shelf(session, shelf)
+    
+    try:
+        await crud.delete_shelf(session, shelf)
+    except ValueError as exc:
+        raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=str(exc),
+    ) from exc
