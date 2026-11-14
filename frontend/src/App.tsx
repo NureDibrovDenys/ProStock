@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth/RequireAuth';
-import { RequirePermission } from './auth/RequirePermission';
+import { RequireAdmin, RequirePermission } from './auth/RequirePermission';
 import { AppLayout } from './components/AppLayout';
 import { CounterpartyFormPage } from './pages/CounterpartyFormPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -15,6 +15,7 @@ import { OutboundOrderFormPage } from './pages/OutboundOrderFormPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { RackPage } from './pages/RackPage';
 import { WarehousePage } from './pages/WarehousePage';
+import { WarehousesPage } from './pages/WarehousesPage';
 import { AUTH_ENABLED } from './config';
 
 export function App() {
@@ -128,6 +129,14 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/warehouse" element={<WarehousePage />} />
           <Route path="/warehouse/racks/:rackCode" element={<RackPage />} />
+          <Route
+            path="/warehouses"
+            element={
+              <RequireAdmin>
+                <WarehousesPage />
+              </RequireAdmin>
+            }
+          />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

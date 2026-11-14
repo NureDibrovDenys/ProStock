@@ -47,6 +47,10 @@ DIRECTORY_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_
 # Inbound and outbound orders: creating, editing, posting — admins and managers
 ORDER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
 
+# Shelves: creating, editing, deleting — admins and managers
+# (mirrors 'require_write' in app/warehouses/router.py)
+SHELF_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+
 def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
     """
     Return a list of capabilities for a role (for the UI).
@@ -69,6 +73,7 @@ def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
             "warehouse_map_write": False,
             "directories_manage": False,
             "orders_manage": False,
+            "shelves_manage": False,
         }
     
     return {
@@ -82,4 +87,5 @@ def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
         "warehouse_map_write": role_enum in WAREHOUSE_MAP_WRITE_ROLES,
         "directories_manage": role_enum in DIRECTORY_MANAGE_ROLES,
         "orders_manage": role_enum in ORDER_MANAGE_ROLES,
+        "shelves_manage": role_enum in SHELF_MANAGE_ROLES,
     }

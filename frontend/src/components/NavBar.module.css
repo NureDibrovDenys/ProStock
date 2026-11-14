@@ -108,6 +108,58 @@
   background: rgba(255, 255, 255, 0.16);
 }
 
+/* Перемикач поточного складу (адміністратор) */
+.switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: var(--radius-sm);
+  color: var(--color-on-primary);
+  transition: background-color 0.15s ease;
+}
+
+.switcher:hover,
+.switcher:focus-within {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.switcherSelect {
+  min-width: 0;
+  max-width: 200px;
+  height: 38px;
+  padding-right: 18px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.switcherSelect:disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+
+/* Список опцій малює браузер — на світлому фоні */
+.switcherSelect option {
+  color: var(--color-text);
+}
+
+.switcherChevron {
+  position: absolute;
+  right: 8px;
+  pointer-events: none;
+}
+
 /* На телефоні вкладки переносяться на другий рядок на всю ширину */
 @media (max-width: 820px) {
   .bar {

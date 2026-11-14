@@ -1,11 +1,28 @@
 import { request } from './client';
-import type { DashboardStats, RackDetails, RackSummary, Warehouse, WarehouseMap } from './types';
+import type {
+  DashboardStats,
+  RackDetails,
+  RackSummary,
+  Shelf,
+  ShelfInput,
+  ShelfPatch,
+  Warehouse,
+  WarehouseInput,
+  WarehouseMap,
+} from './types';
 
 /** GET /api/v1/warehouses/{id} */
 export const getWarehouse = (warehouseId: number) => request<Warehouse>(`/warehouses/${warehouseId}`);
 
-/** GET /api/v1/warehouses — доступні склади для прив'язки облікового запису. */
+/** GET /api/v1/warehouses — усі склади (лише root / administrator). */
 export const getWarehouses = () => request<Warehouse[]>('/warehouses');
+
+/** POST /api/v1/warehouses — створення складу (лише root / administrator). */
+export const createWarehouse = (data: WarehouseInput) => request<Warehouse>('/warehouses', { method: 'POST', body: data });
+
+/** PATCH /api/v1/warehouses/{id} — зміна назви, адреси чи площі (лише root / administrator). */
+export const updateWarehouse = (warehouseId: number, data: Partial<WarehouseInput>) =>
+  request<Warehouse>(`/warehouses/${warehouseId}`, { method: 'PATCH', body: data });
 
 /** GET /api/v1/warehouses/{id}/map */
 export async function getWarehouseMap(warehouseId: number): Promise<WarehouseMap> {
@@ -34,3 +51,33 @@ export const getRacks = (warehouseId: number) => request<RackSummary[]>(`/wareho
 /** GET /api/v1/warehouses/{id}/racks/{rack_code} — полиці стелажа. */
 export const getRackDetails = (warehouseId: number, rackCode: string) =>
   request<RackDetails>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}`);
+
+// ── Полиці ─────────────────────────────────────────────────────────────────
+
+/** GET /api/v1/warehouses/{id}/racks/{rack_code}/shelves — повні дані полиць стелажа. */
+export const listShelves = (warehouseId: number, rackCode: string) =>
+  request<Shelf[]>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves`);
+
+/** GET /api/v1/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id} — повні дані полиці. */
+export const getShelf = (warehouseId: number, rackCode: string, shelfId: number) =>
+  request<Shelf>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves/${shelfId}`);
+
+/** POST /api/v1/warehouses/{id}/racks/{rack_code}/shelves — створення полиці (адмін / менеджер). */
+export const createShelf = (warehouseId: number, rackCode: string, data: ShelfInput) =>
+  request<Shelf>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves`, {
+    method: 'POST',
+    body: data,
+  });
+
+/** PATCH /api/v1/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id} — часткове оновлення (адмін / менеджер). */
+export const updateShelf = (warehouseId: number, rackCode: string, shelfId: number, data: ShelfPatch) =>
+  request<Shelf>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves/${shelfId}`, {
+    method: 'PATCH',
+    body: data,
+  });
+
+/** DELETE /api/v1/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id} — видалення полиці (адмін / менеджер). */
+export const deleteShelf = (warehouseId: number, rackCode: string, shelfId: number) =>
+  request<void>(`/warehouses/${warehouseId}/racks/${encodeURIComponent(rackCode)}/shelves/${shelfId}`, {
+    method: 'DELETE',
+  });

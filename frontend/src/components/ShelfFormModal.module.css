@@ -1,0 +1,26 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.serverError {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(129, 30, 30, 0.08);
+  font-size: 14px;
+  color: var(--color-danger);
+}
+
+@media (max-width: 620px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
