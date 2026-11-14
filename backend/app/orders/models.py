@@ -263,9 +263,9 @@ class OutboundOrderItem(Base):
         nullable=False,
         index=True,
     )
-    quantity: Mapped[int] = mapped_column(
+    quantity: Mapped[Decimal] = mapped_column(
         "quantity",
-        Integer,
+        Numeric(precision=10, scale=2),
         nullable=False,
     )
     package_type: Mapped[str] = mapped_column(
@@ -287,12 +287,6 @@ class OutboundOrderItem(Base):
         CheckConstraint(
             "quantity > 0",
             name="check_outbound_order_item_quantity_positive",
-        ),
-        UniqueConstraint(
-            "outbound_order_id",
-            "product_id",
-            "package_type",
-            name="unique_outbound_order_product_package",
         ),
     )
 

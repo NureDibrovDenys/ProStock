@@ -43,13 +43,12 @@ def upgrade() -> None:
         sa.Column('outbound_order_item_id', sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column('outbound_order_id', sa.BigInteger(), nullable=False),
         sa.Column('product_id', sa.BigInteger(), nullable=False),
-        sa.Column('quantity', sa.Integer(), nullable=False),
+        sa.Column('quantity', sa.Numeric(precision=10, scale=2), nullable=False),
         sa.Column('package_type', sa.String(length=30), nullable=False),
         sa.CheckConstraint('quantity > 0', name='check_outbound_order_item_quantity_positive'),
         sa.ForeignKeyConstraint(['outbound_order_id'], ['outbound_order.outbound_order_id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['product_id'], ['product.product_id'], ondelete='RESTRICT'),
         sa.PrimaryKeyConstraint('outbound_order_item_id'),
-        sa.UniqueConstraint('outbound_order_id', 'product_id', 'package_type', name='unique_outbound_order_product_package'),
     )
     op.create_index(op.f('ix_outbound_order_item_outbound_order_id'), 'outbound_order_item', ['outbound_order_id'], unique=False)
     op.create_index(op.f('ix_outbound_order_item_product_id'), 'outbound_order_item', ['product_id'], unique=False)
