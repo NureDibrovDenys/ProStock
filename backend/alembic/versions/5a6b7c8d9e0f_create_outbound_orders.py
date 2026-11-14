@@ -1,7 +1,7 @@
 """Create outbound orders
 
 Revision ID: 5a6b7c8d9e0f
-Revises: 31337158d869
+Revises: 314af5682e78
 Create Date: 2026-11-13 11:00:00
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision: str = '5a6b7c8d9e0f'
-down_revision: Union[str, None] = '31337158d869'
+down_revision: Union[str, None] = '314af5682e78'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
