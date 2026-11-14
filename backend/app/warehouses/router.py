@@ -130,7 +130,7 @@ async def update_warehouse(
     if warehouse is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
 
-    if data.model_dump(exclude_none=True) == {}:
+    if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Потрібно передати хоча б одне поле для оновлення",
@@ -384,7 +384,13 @@ async def update_shelf(
     shelf = await crud.get_shelf(session, shelf_id)
     if shelf is None or shelf.rack_id != rack.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Полицю не знайдено")
-    shelf = await crud.update_shelf(session, shelf, data)
+    try:
+        shelf = await crud.update_shelf(session, shelf, data)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail = str(exc),
+        )from exc
     return _shelf_to_response(shelf)
 
 

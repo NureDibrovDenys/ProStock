@@ -803,9 +803,17 @@ class Shelf(Base):
     def validate_shelf_max_weight(self, key, value):
         return validate_positive_decimal(key, value)
 
-    def occupy(self):
+    def occupy(self) -> None:
+        """Позначає полицю зайнятною без зміни її технічного статусу."""
+        if self.status != ShelfStatus.ACTIVE:
+            raise ValueError("Не можна розміщувати товар на неактивній полиці.") 
+        
         self.is_occupied = True
-        self.status = ShelfStatus.OCCUPIED
+        
+    def release(self) -> None:
+        """Позначає полицю вільною без зміни її технічного статусу."""
+        
+        self.is_occupied = False
 
     @property
     def total_volume_m3(self) -> float:
