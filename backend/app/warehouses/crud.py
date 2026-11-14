@@ -4,12 +4,13 @@ CRUD-операції для складів, стелажів і полиць.
 from __future__ import annotations
 
 from decimal import Decimal
+from wsgiref import validate
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
+from app.core.enums import ShelfStatus, InactiveReason
 from app.warehouses.models import Rack, Shelf, Warehouse
 from app.warehouses.schemas import ShelfCreate, ShelfUpdate, WarehouseCreate, WarehouseUpdate
 
@@ -49,7 +50,7 @@ async def update_warehouse(
     Частково оновлює склад.
     Змінює лише ті поля, що явно передані в тілі запиту (не None).
     """
-    update_data = data.model_dump(exclude_none=True)
+    update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(warehouse, field, value)
     await session.commit()
@@ -93,6 +94,18 @@ async def get_rack_by_code(
 
 
 # ── Shelf ─────────────────────────────────────────────────────────────────────
+#повертає всі полиці конкретного стелажа
+async def get_shelves_by_rack(
+    session: AsyncSession,
+    rack_id:int,
+    
+)-> list[Shelf]:
+    result = await session.scalars(
+        select(Shelf).where(Shelf.rack_id == rack_id).order_by(Shelf.code)
+        
+    )
+    return list(result.all())
+
 
 async def get_shelf(session: AsyncSession, shelf_id: int) -> Shelf | None:
     """Повертає полицю за id або None."""
@@ -110,6 +123,21 @@ async def get_shelf_by_code(
     )
 
 
+def validate_shelf_status(
+    shelf_status: ShelfStatus,
+    inactive_reason: InactiveReason | None
+)-> None:
+    """Перевірка узгодженості статусу полиці та причини недоступності"""
+    if shelf_status == ShelfStatus.OCCUPIED:
+        raise ValueError("Статус 'occupied' не можна встановлювати вручну. Зайнятість полиці визначається складськими операціями.")
+    
+    if shelf_status == ShelfStatus.INACTIVE:
+        if inactive_reason is None:
+            raise ValueError ("Для неактивної полиці необхідно вказати причину недоступності.")
+        
+    elif inactive_reason is not None:
+        raise ValueError ("Причину недоступності можна вказувати лише для неактивної полиці.")
+
 async def create_shelf(
     session: AsyncSession,
     rack: Rack,
@@ -121,11 +149,12 @@ async def create_shelf(
     QR формується як «{rack.code}-{data.code}».
     Перевіряє унікальність code в рамках БД; при конфлікті — raises ValueError.
     """
+    validate_shelf_status(data.status, data.inactive_reason)
     existing = await get_shelf_by_code(session, rack.id, data.code)
     if existing is not None:
         raise ValueError(f"Полиця з кодом '{data.code}' вже існує в стелажі '{rack.code}'")
 
-    qr = f"{rack.code}-{data.code}"
+    qr = f"R{rack.code}-{data.code}"
     shelf = Shelf(
         rack_id=rack.id,
         code=data.code,
@@ -155,7 +184,12 @@ async def update_shelf(
     data: ShelfUpdate,
 ) -> Shelf:
     """Частково оновлює полицю — лише передані (не None) поля."""
-    for field, value in data.model_dump(exclude_none=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    new_status = update_data.get("status", shelf.status)
+    new_reason = update_data.get("inactive_reason", shelf.inactive_reason)
+    validate_shelf_status(new_status, new_reason)
+    
+    for field, value in update_data.items():
         setattr(shelf, field, value)
     await session.commit()
     await session.refresh(shelf)
@@ -164,5 +198,8 @@ async def update_shelf(
 
 async def delete_shelf(session: AsyncSession, shelf: Shelf) -> None:
     """Видаляє полицю."""
+    
+    if shelf.is_occupied:
+        raise ValueError("Неможливо видалити зайняту полицю")
     await session.delete(shelf)
     await session.commit()
