@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.interfaces import LoaderOption
 
-from app.core.enums import OrderStatus
+from app.core.enums import OrderStatus, SupplierStatus
 from app.orders.models import InboundOrder, InboundOrderItem
 from app.orders.schemas import (
     InboundOrderUpdate,
@@ -25,6 +25,17 @@ class InboundOrderNotFoundError(Exception):
 
 class SupplierNotFoundError(Exception):
     pass
+
+class SupplierNotActiveError(Exception):
+    pass
+
+def _ensure_supplier_active(supplier: Supplier) -> None:
+    # Неактивний (архів) або заблокований постачальник не бере участі в нових поставках
+    if supplier.status != SupplierStatus.ACTIVE:
+        raise SupplierNotActiveError(
+            f"Постачальник «{supplier.company_name}» має статус «{supplier.status.value}» - "
+            "оберіть активного постачальника"
+        )
 
 class ProductNotFoundError(Exception):
     pass
@@ -92,10 +103,8 @@ async def list_inbound_orders(
             or_(InboundOrder.invoice_number.ilike(pattern))
         )
     
-    count_stmt = select(
-        func.count(InboundOrder.id)
-        .where(*conditions)
-    )
+    # where - до select, а не до func.count (інакше AttributeError і 500 на кожен запит списку)
+    count_stmt = select(func.count(InboundOrder.id)).where(*conditions)
     count_result = await session.scalar(count_stmt)
     total: int = count_result or 0
     
@@ -131,6 +140,7 @@ async def create_inbound_order(
         raise SupplierNotFoundError(
             f"Supplier with ID {data.supplier_id} not found"
         )
+    _ensure_supplier_active(supplier)
 
     warehouse = await session.get(Warehouse, data.warehouse_id)
     if warehouse is None:
@@ -212,6 +222,7 @@ async def update_inbound_order(
             raise SupplierNotFoundError(
                 f"Supplier with ID {update_data['supplier_id']} not found"
             )
+        _ensure_supplier_active(supplier)
 
     if (
         "warehouse_id" in update_data
@@ -245,7 +256,8 @@ async def update_inbound_order(
         setattr(inbound_order, field, value)
     
     if items_data is not None:
-        product_ids = [item.product_id for item in items_data]
+        # model_dump() перетворив позиції на dict, атрибутного доступу в них немає
+        product_ids = [item["product_id"] for item in items_data]
         if product_ids:
             found_products = await session.scalars(
                 select(Product.id)

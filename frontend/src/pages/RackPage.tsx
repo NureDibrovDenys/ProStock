@@ -70,11 +70,11 @@ export function RackPage() {
   });
 
   const capacity = shelves.length;
-  const fill = capacity
-    ? Math.round(
-        shelves.reduce((sum, shelf) => sum + (shelf.volume_fill_percent ?? 0), 0) / capacity,
-      )
-    : 0;
+  // Частка зайнятого об'єму, як на бекенді (fill_service) і на мапі складу. Середнє відсотків
+  // полиць тут не годиться: мала заповнена полиця й велика порожня дали б 50%.
+  const totalVolume = shelves.reduce((sum, shelf) => sum + (shelf.volume_m3 ?? 0), 0);
+  const usedVolume = shelves.reduce((sum, shelf) => sum + (shelf.used_volume_m3 ?? 0), 0);
+  const fill = totalVolume > 0 ? Math.round((usedVolume / totalVolume) * 100) : 0;
 
   if (warehouseId === null) {
     return <NoWarehouseState />;

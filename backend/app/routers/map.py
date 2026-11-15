@@ -6,7 +6,11 @@ from app.core.enums import RoleName
 from app.core.rbac import ADMIN_ROLES, WAREHOUSE_MAP_WRITE_ROLES
 from app.utils.security import get_current_user, require_roles
 from ..schemas import WareHouseMapSchema, WarehouseMapUpdateSchema
-from app.warehouses.services.warehouse_map_service import WarehouseMapNotFound, WarehouseMapService
+from app.warehouses.services.warehouse_map_service import (
+    RacksWithStockRemoved,
+    WarehouseMapNotFound,
+    WarehouseMapService,
+)
 
 router = APIRouter(prefix="/api/v1/warehouses", tags=["Warehouse Map"])
 
@@ -75,3 +79,6 @@ async def save_warehouse_map(
         return await WarehouseMapService.save_map(session, warehouse_id, map_data)
     except WarehouseMapNotFound:
         raise _not_found(warehouse_id)
+    except RacksWithStockRemoved as e:
+        # Зміни мапи відкотить get_async_session
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e

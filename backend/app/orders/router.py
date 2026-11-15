@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.enums import OrderStatus, OrderType, RoleName
-from app.core.rbac import ALL_ROLES
+from app.core.rbac import ADMIN_ROLES, ALL_ROLES
 from app.core.units import volume_m3
+from app.routers.map import _check_warehouse_access
 from app.utils.role_checker import RoleChecker
 from app.orders import crud, outbound_crud
 from app.orders import list_service
@@ -66,6 +67,25 @@ require_manager_or_admin: RoleChecker = RoleChecker(
 require_authenticated: RoleChecker = RoleChecker(
     *[role.value for role in ALL_ROLES]
 )
+
+def _scoped_warehouse(current_user: dict, warehouse_id: int | None) -> int | None:
+    """Фільтр складу для списків: менеджер і комірник бачать лише накладні свого складу."""
+    if current_user.get("role") in ADMIN_ROLES:
+        return warehouse_id
+    own = current_user.get("warehouse_id")
+    if own is None or (warehouse_id is not None and warehouse_id != own):
+        # Та сама відповідь, що й у _check_warehouse_access
+        _check_warehouse_access(current_user, warehouse_id if warehouse_id is not None else -1)
+    return own
+
+def _ensure_editable(order: InboundOrder | OutboundOrder) -> None:
+    """Проведена накладна вже змінила залишки: правка зробила б їх неузгодженими,
+    а повернення в чернетку дозволило б провести її вдруге (подвійний рух товару)."""
+    if order.order_status == OrderStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Накладну {order.invoice_number} проведено - змінювати її не можна",
+        )
 
 def _to_response(
     order: InboundOrder
@@ -125,7 +145,7 @@ def _shortage_error(status_code: int, message: str, shortages: list[dict]) -> HT
 )
 async def get_inbound_order(
     order_id: int,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> InboundOrderResponse:
     order: InboundOrder = await crud.get_inbound_order(session, order_id)
@@ -134,6 +154,7 @@ async def get_inbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
     return _to_response(order)
 
 @router.get(
@@ -148,7 +169,7 @@ async def list_inbound_orders(
     warehouse_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[InboundOrderResponse]:
     orders, _ = await crud.list_inbound_orders(
@@ -156,7 +177,7 @@ async def list_inbound_orders(
         search=search,
         order_status=order_status,
         supplier_id=supplier_id,
-        warehouse_id=warehouse_id,
+        warehouse_id=_scoped_warehouse(current_user, warehouse_id),
         page=page,
         page_size=page_size,
     )
@@ -173,6 +194,7 @@ async def create_inbound_order(
     current_user: dict = Depends(require_manager_or_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> InboundOrderResponse:
+    _check_warehouse_access(current_user, data.warehouse_id)
     try:
         user_id = current_user.get("id", 1) # get user ID from token
         order = await crud.create_inbound_order(
@@ -187,6 +209,11 @@ async def create_inbound_order(
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except crud.SupplierNotActiveError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(e)
         )
     except crud.InvoiceNumberAlreadyExistsError as e:
@@ -205,7 +232,7 @@ async def create_inbound_order(
 async def update_inbound_order(
     order_id: int,
     data: InboundOrderUpdate,
-    _: dict = Depends(require_manager_or_admin),
+    current_user: dict = Depends(require_manager_or_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> InboundOrderResponse:
     order: InboundOrder = await crud.get_inbound_order(
@@ -216,7 +243,11 @@ async def update_inbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inbound Order {order_id} not found",
         )
-    
+    _check_warehouse_access(current_user, order.warehouse_id)
+    if data.warehouse_id is not None:
+        _check_warehouse_access(current_user, data.warehouse_id)
+    _ensure_editable(order)
+
     if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -236,6 +267,11 @@ async def update_inbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+    except crud.SupplierNotActiveError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(e)
+        )
     except crud.InvoiceNumberAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -251,7 +287,7 @@ async def update_inbound_order(
 )
 async def delete_inbound_order(
     order_id: int,
-    _: dict = Depends(require_manager_or_admin),
+    current_user: dict = Depends(require_manager_or_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
     order: InboundOrder = await crud.get_inbound_order(
@@ -262,7 +298,8 @@ async def delete_inbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inbound Order {order_id} not found",
         )
-    
+    _check_warehouse_access(current_user, order.warehouse_id)
+
     try:
         await crud.delete_inbound_order(session, order)
     except crud.InboundOrderCannotBeDeletedError as e:
@@ -292,6 +329,7 @@ async def post_inbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Inbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
 
     try:
         posted = await posting.post_inbound_order(
@@ -328,10 +366,11 @@ async def post_inbound_order(
 async def check_inbound_capacity(
     items: list[dict],
     warehouse_id: int = Query(..., description="Склад, на якому перевіряємо місце"),
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> CapacityCheckResponse:
-    
+    _check_warehouse_access(current_user, warehouse_id)
+
     parsed: list[tuple[int, Decimal, str]] = []
     for raw in items:
         try:
@@ -407,7 +446,7 @@ async def list_outbound_orders(
     warehouse_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[OutboundOrderResponse]:
     orders, _ = await outbound_crud.list_outbound_orders(
@@ -415,7 +454,7 @@ async def list_outbound_orders(
         search=search,
         order_status=order_status,
         recipient_id=recipient_id,
-        warehouse_id=warehouse_id,
+        warehouse_id=_scoped_warehouse(current_user, warehouse_id),
         page=page,
         page_size=page_size,
     )
@@ -428,7 +467,7 @@ async def list_outbound_orders(
 )
 async def get_outbound_order(
     order_id: int,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> OutboundOrderResponse:
     order = await outbound_crud.get_outbound_order(session, order_id)
@@ -437,6 +476,7 @@ async def get_outbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Outbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
     return _outbound_to_response(order)
 
 @outbound_router.post(
@@ -454,6 +494,7 @@ async def create_outbound_order(
     current_user: dict = Depends(require_manager_or_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> OutboundOrderResponse:
+    _check_warehouse_access(current_user, data.warehouse_id)
     try:
         order = await outbound_crud.create_outbound_order(
             session,
@@ -467,6 +508,11 @@ async def create_outbound_order(
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except outbound_crud.RecipientNotActiveError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(e),
         ) from e
     except outbound_crud.InvoiceNumberAlreadyExistsError as e:
@@ -485,7 +531,7 @@ async def create_outbound_order(
 async def update_outbound_order(
     order_id: int,
     data: OutboundOrderUpdate,
-    _: dict = Depends(require_manager_or_admin),
+    current_user: dict = Depends(require_manager_or_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> OutboundOrderResponse:
     order = await outbound_crud.get_outbound_order(session, order_id)
@@ -494,6 +540,10 @@ async def update_outbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Outbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
+    if data.warehouse_id is not None:
+        _check_warehouse_access(current_user, data.warehouse_id)
+    _ensure_editable(order)
 
     if data.model_dump(exclude_unset=True) == {}:
         raise HTTPException(
@@ -512,6 +562,11 @@ async def update_outbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
+    except outbound_crud.RecipientNotActiveError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(e),
+        ) from e
     except outbound_crud.InvoiceNumberAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -527,7 +582,7 @@ async def update_outbound_order(
 )
 async def delete_outbound_order(
     order_id: int,
-    _: dict = Depends(require_manager_or_admin),
+    current_user: dict = Depends(require_manager_or_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
     order = await outbound_crud.get_outbound_order(session, order_id)
@@ -536,6 +591,7 @@ async def delete_outbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Outbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
 
     try:
         await outbound_crud.delete_outbound_order(session, order)
@@ -565,6 +621,7 @@ async def post_outbound_order(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Outbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
 
     try:
         posted = await posting.post_outbound_order(
@@ -599,16 +656,17 @@ async def post_outbound_order(
 )
 async def check_outbound_availability(
     order_id: int,
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
-    
+
     order = await outbound_crud.get_outbound_order(session, order_id)
     if order is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Outbound Order {order_id} not found",
         )
+    _check_warehouse_access(current_user, order.warehouse_id)
 
     items = [
         (item.product_id, Decimal(str(item.quantity)), item.package_type)
@@ -644,7 +702,7 @@ async def list_all_orders(
     date_to: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> OrderListResponse:
     items, total = await list_service.list_orders(
@@ -652,7 +710,7 @@ async def list_all_orders(
         order_type=order_type,
         order_status=order_status,
         search=search,
-        warehouse_id=warehouse_id,
+        warehouse_id=_scoped_warehouse(current_user, warehouse_id),
         date_from=date_from,
         date_to=date_to,
         page=page,
@@ -676,10 +734,12 @@ async def get_stock_levels(
         None, description="Список id товарів через кому, наприклад 1,2,3"
     ),
     warehouse_id: int | None = Query(None, description="Склад; за замовчуванням - усі"),
-    _: dict = Depends(require_authenticated),
+    current_user: dict = Depends(require_authenticated),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[StockLevelResponse]:
-    
+    # Менеджер і комірник бачать залишки лише свого складу
+    warehouse_id = _scoped_warehouse(current_user, warehouse_id)
+
     parsed_ids: list[int] | None = None
     if product_ids:
         parsed_ids = []
