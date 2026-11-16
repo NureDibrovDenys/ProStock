@@ -6,7 +6,7 @@ from __future__ import annotations
 from decimal import Decimal
 from wsgiref import validate
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -197,10 +197,24 @@ async def update_shelf(
     return shelf
 
 
+async def shelves_have_stock(session: AsyncSession, shelf_ids: list[int]) -> bool:
+    """Чи лежить товар хоча б на одній із полиць (залишки видаляються з полицею каскадом)."""
+    if not shelf_ids:
+        return False
+    from app.stock.models import StockItem
+
+    return bool(
+        await session.scalar(select(exists().where(StockItem.shelf_id.in_(shelf_ids))))
+    )
+
+
 async def delete_shelf(session: AsyncSession, shelf: Shelf) -> None:
     """Видаляє полицю."""
-    
-    if shelf.is_occupied:
-        raise ValueError("Неможливо видалити зайняту полицю")
+
+    # Прапорець is_occupied проведення накладних не оновлює, тож дивимося на фактичні залишки
+    if shelf.is_occupied or await shelves_have_stock(session, [shelf.id]):
+        raise ValueError(
+            "Неможливо видалити полицю з товаром - спершу відвантажте або перемістіть його"
+        )
     await session.delete(shelf)
     await session.commit()

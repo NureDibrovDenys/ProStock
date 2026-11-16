@@ -183,6 +183,15 @@ class ShelfUpdate(BaseModel):
     status: ShelfStatus | None = None
     inactive_reason: InactiveReason | None = None
 
+    @model_validator(mode="after")
+    def required_fields_not_null(self) -> "ShelfUpdate":
+        # Оновлення бере передані поля (exclude_unset): явний null дійшов би до NOT NULL-колонок.
+        # inactive_reason null стирає причину, решта полів обов'язкові.
+        for field in ("width", "length", "height", "max_weight", "status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"Поле {field} не може бути null")
+        return self
+
 class ShelfResponse(BaseModel):
     
 

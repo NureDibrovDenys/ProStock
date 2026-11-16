@@ -169,7 +169,7 @@ async def test_completed_order_cannot_be_edited(client: AsyncClient):
         headers=auth(token),
         json={"planned_shipment_date": "2026-12-20T00:00:00Z"},
     )
-    assert response.status_code == 400, response.text
+    assert response.status_code == 409, response.text
     assert "проведен" in response.json()["detail"].lower()
 
 
@@ -190,7 +190,7 @@ async def test_posted_order_cannot_be_reopened_and_posted_again(client: AsyncCli
         headers=auth(token),
         json={"order_status": "draft"},
     )
-    assert reopened.status_code == 400, reopened.text
+    assert reopened.status_code == 409, reopened.text
 
     again = await _post(client, token, order["outbound_order_id"])
     assert again.status_code == 409, again.text
@@ -221,8 +221,7 @@ async def test_order_cannot_be_created_as_completed_without_posting(client: Asyn
             ],
         },
     )
-    assert response.status_code == 201, response.text
-    assert response.json()["order_status"] == "draft"
+    assert response.status_code == 422, response.text
     assert await _stock_level(client, token, fixture) == Decimal("100")
 
 

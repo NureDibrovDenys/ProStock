@@ -150,6 +150,10 @@ async def delete_warehouse(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Склад не знайдено")
     await crud.delete_warehouse(session, warehouse)
 
+def _is_occupied(shelf, fill=None) -> bool:
+    # Проведення накладних кладе товар у stock_item, але прапорець shelf.is_occupied не чіпає
+    return bool(shelf.is_occupied or (fill is not None and fill.items_count > 0))
+
 def _shelf_to_info(shelf, fill=None) -> ShelfInfoResponse:
     used_volume = float(fill.used_volume_m3) if fill is not None else 0.0
     used_weight = float(fill.used_weight_kg) if fill is not None else 0.0
@@ -161,7 +165,7 @@ def _shelf_to_info(shelf, fill=None) -> ShelfInfoResponse:
         shelf_id=shelf.id,
         shelf_code=shelf.code,
         product_name=None,
-        occupied=1 if shelf.is_occupied else 0,
+        occupied=1 if _is_occupied(shelf, fill) else 0,
         capacity=1,
         shelf_status=shelf.status.value if hasattr(shelf.status, "value") else shelf.status,
         volume_fill_percent=fill.volume_fill_percent if fill is not None else 0.0,
@@ -214,7 +218,7 @@ def _shelf_to_response(shelf, fill=None) -> ShelfResponse:
         length=shelf.length,
         height=shelf.height,
         max_weight=shelf.max_weight,
-        is_occupied=shelf.is_occupied,
+        is_occupied=_is_occupied(shelf, fill),
         status=shelf.status.value if hasattr(shelf.status, "value") else shelf.status,
         inactive_reason=(
             shelf.inactive_reason.value
@@ -427,7 +431,9 @@ async def update_shelf(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail = str(exc),
         )from exc
-    return _shelf_to_response(shelf)
+    # Нові розміри змінюють заповненість (аж до перевантаження) - віддаємо її одразу
+    shelf_fills = await fill_service.get_shelf_fills(session, warehouse_id)
+    return _shelf_to_response(shelf, shelf_fills.get(shelf.id))
 
 @router.delete(
     "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",

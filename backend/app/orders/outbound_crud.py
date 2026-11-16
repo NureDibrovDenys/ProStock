@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.interfaces import LoaderOption
 
-from app.core.enums import OrderStatus
+from app.core.enums import OrderStatus, RecipientStatus
 from app.orders.models import OutboundOrder, OutboundOrderItem
 from app.orders.schemas import OutboundOrderCreate, OutboundOrderUpdate
 from app.products.models import Product, Recipient
@@ -22,6 +22,17 @@ class OutboundOrderNotFoundError(Exception):
 
 class RecipientNotFoundError(Exception):
     pass
+
+class RecipientNotActiveError(Exception):
+    pass
+
+def _ensure_recipient_active(recipient: Recipient) -> None:
+    # Неактивний (архів) або заблокований одержувач не бере участі в нових відвантаженнях
+    if recipient.status != RecipientStatus.ACTIVE:
+        raise RecipientNotActiveError(
+            f"Одержувач «{recipient.company_name}» має статус «{recipient.status.value}» - "
+            "оберіть активного одержувача"
+        )
 
 class ProductNotFoundError(Exception):
     pass
@@ -124,6 +135,7 @@ async def create_outbound_order(
     recipient = await session.get(Recipient, data.recipient_id)
     if recipient is None:
         raise RecipientNotFoundError(f"Recipient with ID {data.recipient_id} not found")
+    _ensure_recipient_active(recipient)
 
     await _ensure_warehouse_exists(session, data.warehouse_id)
     await _ensure_products_exist(session, [item.product_id for item in data.items])
@@ -178,17 +190,7 @@ async def update_outbound_order(
     if outbound_order.order_status == OrderStatus.COMPLETED:
         raise OutboundOrderCannotBeEditedError(
             f"Накладну {outbound_order.invoice_number} не можна редагувати: "
-            "она вже проведена (статус «Завершено»)"
-        )
-
-    if (
-        "order_status" in data.model_dump(exclude_unset=True)
-        and data.order_status == OrderStatus.DRAFT
-        and outbound_order.order_status == OrderStatus.COMPLETED
-    ):
-        raise OutboundOrderCannotBeEditedError(
-            f"Накладну {outbound_order.invoice_number} не можна повернути в чернетку: "
-            "она вже проведена (статус «Завершено»)"
+            "вона вже проведена (статус «Завершено»)"
         )
 
     update_data: dict[str, Any] = data.model_dump(exclude_unset=True)
@@ -203,6 +205,7 @@ async def update_outbound_order(
             raise RecipientNotFoundError(
                 f"Recipient with ID {update_data['recipient_id']} not found"
             )
+        _ensure_recipient_active(recipient)
 
     if (
         "warehouse_id" in update_data
