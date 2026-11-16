@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import OrderStatus
@@ -11,6 +12,21 @@ from app.stock import service as stock_service
 
 class OrderCannotBePostedError(Exception):
     pass
+
+async def _lock_order_status(
+    session: AsyncSession,
+    order_id: int,
+    model: type[InboundOrder] | type[OutboundOrder],
+) -> OrderStatus:
+    
+    status = await session.scalar(
+        select(model.order_status)
+        .where(model.id == order_id)
+        .with_for_update()
+    )
+    if status is None:
+        raise OrderCannotBePostedError(f"Накладну {order_id} не знайдено")
+    return status
 
 def _ensure_draft(order_status: OrderStatus, invoice_number: str) -> None:
     if order_status != OrderStatus.DRAFT:
@@ -25,7 +41,8 @@ async def post_inbound_order(
     user_id: int,
 ) -> InboundOrder:
     
-    _ensure_draft(order.order_status, order.invoice_number)
+    status = await _lock_order_status(session, order.id, InboundOrder)
+    _ensure_draft(status, order.invoice_number)
 
     items = [
         (item.product_id, Decimal(str(item.quantity)), item.package_type)
@@ -54,7 +71,8 @@ async def post_outbound_order(
     user_id: int,
 ) -> OutboundOrder:
     
-    _ensure_draft(order.order_status, order.invoice_number)
+    status = await _lock_order_status(session, order.id, OutboundOrder)
+    _ensure_draft(status, order.invoice_number)
 
     items = [
         (item.product_id, Decimal(str(item.quantity)), item.package_type)

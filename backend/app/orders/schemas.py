@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from app.core.enums import OrderStatus, OrderType
+
+
+def _not_completed(value: OrderStatus | None) -> OrderStatus | None:
+    # «Завершено» означає, що товар уже рухався; поставити статус вручну - накладна без руху товару
+    if value == OrderStatus.COMPLETED:
+        raise ValueError(
+            "Статус «Завершено» встановлює лише проведення накладної (POST /{id}/post)"
+        )
+    return value
 
 class InboundOrderItemCreate(BaseModel):
     product_id: int
@@ -32,6 +41,8 @@ class InboundOrderCreate(BaseModel):
     order_status: OrderStatus = OrderStatus.DRAFT
     items: list[InboundOrderItemCreate] = Field(..., min_length=1)
 
+    _status_not_completed = field_validator("order_status")(_not_completed)
+
 class InboundOrderUpdate(BaseModel):
     supplier_id: int | None = None
     warehouse_id: int | None = None
@@ -39,6 +50,8 @@ class InboundOrderUpdate(BaseModel):
     expected_delivery_date: datetime | None = None
     order_status: OrderStatus | None = None
     items: list[InboundOrderItemCreate] | None = None
+
+    _status_not_completed = field_validator("order_status")(_not_completed)
 
 class InboundOrderResponse(BaseModel):
     inbound_order_id: int
@@ -83,6 +96,8 @@ class OutboundOrderCreate(BaseModel):
     order_status: OrderStatus = OrderStatus.DRAFT
     items: list[OutboundOrderItemCreate] = Field(..., min_length=1)
 
+    _status_not_completed = field_validator("order_status")(_not_completed)
+
 class OutboundOrderUpdate(BaseModel):
     recipient_id: int | None = None
     warehouse_id: int | None = None
@@ -90,6 +105,8 @@ class OutboundOrderUpdate(BaseModel):
     invoice_number: str | None = Field(default=None, max_length=50)
     order_status: OrderStatus | None = None
     items: list[OutboundOrderItemCreate] | None = Field(default=None, min_length=1)
+
+    _status_not_completed = field_validator("order_status")(_not_completed)
 
 class OutboundOrderResponse(BaseModel):
     outbound_order_id: int

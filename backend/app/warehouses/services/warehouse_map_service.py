@@ -118,6 +118,32 @@ def _rack_fill_fields(
 class WarehouseMapNotFound(Exception):
     pass
 
+class RacksWithStockRemoved(Exception):
+    """З мапи прибрали стелажі, на полицях яких лежить товар."""
+
+    def __init__(self, rack_codes: list[str]):
+        self.rack_codes = rack_codes
+        super().__init__(
+            "Не можна видалити стелажі з товаром: "
+            f"{', '.join(rack_codes)}. Спершу відвантажте або перемістіть товар."
+        )
+
+async def _racks_with_stock(session: AsyncSession, racks: list[Rack]) -> list[str]:
+    # Стелаж видаляється з полицями каскадом, а полиці - разом із залишками (stock_item)
+    from app.stock.models import StockItem
+    from app.warehouses.models import Shelf
+
+    if not racks:
+        return []
+    codes = await session.scalars(
+        select(Rack.code)
+        .join(Shelf, Shelf.rack_id == Rack.id)
+        .join(StockItem, StockItem.shelf_id == Shelf.id)
+        .where(Rack.id.in_([rack.id for rack in racks]))
+        .distinct()
+    )
+    return sorted(codes.all())
+
 class WarehouseMapService:
     @staticmethod
     async def _load_warehouse(session: AsyncSession, warehouse_id: int, for_update: bool = False) -> Warehouse:
@@ -167,6 +193,11 @@ class WarehouseMapService:
                         value = _to_angle(value)
                     setattr(obj, attr, value)
                 synced.append(obj)
+            # Те, що лишилося в existing, буде видалено - стелажі з товаром не віддаємо
+            if collection == "racks":
+                loaded = await _racks_with_stock(session, list(existing.values()))
+                if loaded:
+                    raise RacksWithStockRemoved(loaded)
             setattr(warehouse, collection, synced)
 
         if warehouse.walls:
