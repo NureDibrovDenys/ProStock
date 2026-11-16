@@ -174,10 +174,10 @@ async def create_inbound_order(
     except IntegrityError as e:
         await session.rollback()
         
-        original_error = getattr(e, "original_error", None)
+        original_error = getattr(e, "orig", None)
         if (
             original_error
-            and getattr(original_error, "original_name", None) == "23505"
+            and getattr(original_error, "sqlstate", None) == "23505"
         ):
             raise InvoiceNumberAlreadyExistsError(
                 f"Invoice number '{inbound_order.invoice_number}' already exists"
