@@ -89,7 +89,7 @@ class OutboundOrderUpdate(BaseModel):
     planned_shipment_date: datetime | None = None
     invoice_number: str | None = Field(default=None, max_length=50)
     order_status: OrderStatus | None = None
-    items: list[OutboundOrderItemCreate] | None = None
+    items: list[OutboundOrderItemCreate] | None = Field(default=None, min_length=1)
 
 class OutboundOrderResponse(BaseModel):
     outbound_order_id: int

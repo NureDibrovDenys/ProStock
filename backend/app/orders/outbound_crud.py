@@ -35,6 +35,10 @@ class InvoiceNumberAlreadyExistsError(Exception):
 class OutboundOrderCannotBeDeletedError(Exception):
     pass
 
+
+class OutboundOrderCannotBeEditedError(Exception):
+    pass
+
 def _default_options() -> list[LoaderOption]:
     return [
         joinedload(OutboundOrder.recipient, innerjoin=True),
@@ -129,7 +133,7 @@ async def create_outbound_order(
         warehouse_id=data.warehouse_id,
         invoice_number=data.invoice_number or f"TMP-{uuid.uuid4().hex}",
         planned_shipment_date=data.planned_shipment_date,
-        order_status=data.order_status,
+        order_status=OrderStatus.DRAFT,
         created_by_user_id=created_by_user_id,
     )
     session.add(order)
@@ -152,7 +156,7 @@ async def create_outbound_order(
         await session.commit()
     except IntegrityError as e:
         await session.rollback()
-        original_error = getattr(e, "original_error", None)
+        original_error = getattr(e, "orig", None)
         if (
             original_error
             and getattr(original_error, "original_name", None) == "23505"
@@ -171,6 +175,22 @@ async def update_outbound_order(
     data: OutboundOrderUpdate,
 ) -> OutboundOrder:
     
+    if outbound_order.order_status == OrderStatus.COMPLETED:
+        raise OutboundOrderCannotBeEditedError(
+            f"Накладну {outbound_order.invoice_number} не можна редагувати: "
+            "она вже проведена (статус «Завершено»)"
+        )
+
+    if (
+        "order_status" in data.model_dump(exclude_unset=True)
+        and data.order_status == OrderStatus.DRAFT
+        and outbound_order.order_status == OrderStatus.COMPLETED
+    ):
+        raise OutboundOrderCannotBeEditedError(
+            f"Накладну {outbound_order.invoice_number} не можна повернути в чернетку: "
+            "она вже проведена (статус «Завершено»)"
+        )
+
     update_data: dict[str, Any] = data.model_dump(exclude_unset=True)
     items_data: list[dict[str, Any]] | None = update_data.pop("items", None)
 

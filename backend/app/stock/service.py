@@ -98,6 +98,8 @@ async def get_available_quantities(
     session: AsyncSession,
     warehouse_id: int,
     product_ids: list[int] | None = None,
+    *,
+    for_update: bool = False,
 ) -> dict[int, Decimal]:
     
     stmt = select(
@@ -108,6 +110,8 @@ async def get_available_quantities(
         if not product_ids:
             return {}
         stmt = stmt.where(StockItem.product_id.in_(product_ids))
+    if for_update:
+        stmt = stmt.with_for_update()
 
     rows = (await session.execute(stmt)).all()
     totals: dict[int, Decimal] = {}
@@ -119,11 +123,15 @@ async def get_stock_items(
     session: AsyncSession,
     warehouse_id: int,
     product_id: int | None = None,
+    *,
+    for_update: bool = False,
 ) -> list[StockItem]:
     stmt = select(StockItem).where(StockItem.warehouse_id == warehouse_id)
     if product_id is not None:
         stmt = stmt.where(StockItem.product_id == product_id)
     stmt = stmt.order_by(StockItem.shelf_id, StockItem.id)
+    if for_update:
+        stmt = stmt.with_for_update()
     return list((await session.scalars(stmt)).all())
 
 async def _active_shelves(session: AsyncSession, warehouse_id: int) -> list[Shelf]:
@@ -142,20 +150,19 @@ async def _active_shelves(session: AsyncSession, warehouse_id: int) -> list[Shel
     return [shelf for shelf in shelves if shelf.status == ShelfStatus.ACTIVE]
 
 async def _used_capacity(
-    session: AsyncSession, warehouse_id: int
+    session: AsyncSession, warehouse_id: int, *, for_update: bool = False
 ) -> dict[int, tuple[Decimal, Decimal]]:
     
     from app.products.models import Product
 
-    rows = (
-        await session.execute(
-            select(
-                StockItem.shelf_id,
-                StockItem.quantity,
-                StockItem.product_id,
-            ).where(StockItem.warehouse_id == warehouse_id)
-        )
-    ).all()
+    stmt = select(
+        StockItem.shelf_id,
+        StockItem.quantity,
+        StockItem.product_id,
+    ).where(StockItem.warehouse_id == warehouse_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    rows = (await session.execute(stmt)).all()
     if not rows:
         return {}
 
@@ -184,12 +191,12 @@ async def place_incoming(
 ) -> list[CapacityShortage]:
     
     shelves = await _active_shelves(session, warehouse_id)
-    used = await _used_capacity(session, warehouse_id)
+    used = await _used_capacity(session, warehouse_id, for_update=True)
     products = await get_products(session, [item[0] for item in items])
 
     existing = {
         (item.shelf_id, item.product_id, item.package_type): item
-        for item in await get_stock_items(session, warehouse_id)
+        for item in await get_stock_items(session, warehouse_id, for_update=True)
     }
 
     shortages: list[CapacityShortage] = []
@@ -290,10 +297,12 @@ async def check_availability(
     session: AsyncSession,
     warehouse_id: int,
     items: list[tuple[int, Decimal, str]],
+    *,
+    for_update: bool = False,
 ) -> list[Shortage]:
     
     available = await get_available_quantities(
-        session, warehouse_id, [item[0] for item in items]
+        session, warehouse_id, [item[0] for item in items], for_update=for_update
     )
     products = await get_products(session, [item[0] for item in items])
 
@@ -327,12 +336,14 @@ async def remove_outgoing(
     order_id: int | None = None,
 ) -> None:
     
-    shortages = await check_availability(session, warehouse_id, items)
+    shortages = await check_availability(
+        session, warehouse_id, items, for_update=True
+    )
     if shortages:
         raise InsufficientStockError(shortages)
 
     products = await get_products(session, [item[0] for item in items])
-    stock_items = await get_stock_items(session, warehouse_id)
+    stock_items = await get_stock_items(session, warehouse_id, for_update=True)
 
     stock_items.sort(key=lambda item: (item.product_id, item.shelf_id, item.id))
     by_product: dict[int, list[StockItem]] = {}
