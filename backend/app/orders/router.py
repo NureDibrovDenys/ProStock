@@ -517,6 +517,11 @@ async def update_outbound_order(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+    except outbound_crud.OutboundOrderCannotBeEditedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
 
     return _outbound_to_response(updated)
 

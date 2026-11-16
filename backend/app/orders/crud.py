@@ -92,10 +92,7 @@ async def list_inbound_orders(
             or_(InboundOrder.invoice_number.ilike(pattern))
         )
     
-    count_stmt = select(
-        func.count(InboundOrder.id)
-        .where(*conditions)
-    )
+    count_stmt = select(func.count(InboundOrder.id)).where(*conditions)
     count_result = await session.scalar(count_stmt)
     total: int = count_result or 0
     
