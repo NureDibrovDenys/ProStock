@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.schemas import WarehouseMapUpdateSchema
+from app.warehouses.services import fill_service
 from app.warehouses.models import (
     Rack,
     Warehouse,
@@ -19,8 +20,6 @@ from app.warehouses.models import (
     Zone,
 )
 
-#колекція мапи -> (модель, поле id у схемі, поле схеми -> атрибут моделі)
-#назва колекції збігається з relationship у Warehouse
 _COLLECTIONS: dict[str, tuple[type, str, dict[str, str]]] = {
     "partitions": (WarehousePartition, "partition_id", {
         "start_x": "start_x",
@@ -69,27 +68,83 @@ _COLLECTIONS: dict[str, tuple[type, str, dict[str, str]]] = {
 
 _CENTS = Decimal("0.01")
 
-
 def _to_angle(value: float) -> Decimal:
-    """Кут зі схеми (float) -> Numeric(5, 2) у межах [0, 360)."""
+    
     return Decimal(str(value)).quantize(_CENTS) % 360
 
-
 def _polygon_area(walls: list[WarehouseWall]) -> Decimal:
-    """Площа контуру за формулою шнурування (вершини за vertex_order)."""
+    
     pts = [(w.x, w.y) for w in sorted(walls, key=lambda w: w.vertex_order)]
     n = len(pts)
     doubled = sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1] for i in range(n))
     return (abs(doubled) / 2).quantize(_CENTS)
 
+def _rack_fill_fields(
+    rack: Rack,
+    rack_fills: dict[int, "fill_service.RackFill"] | None,
+) -> dict[str, Any]:
+    
+    if not rack_fills:
+        return {
+            "fill_percent": 0.0,
+            "volume_fill_percent": 0.0,
+            "weight_fill_percent": 0.0,
+            "used_volume_m3": 0.0,
+            "total_volume_m3": 0.0,
+            "used_weight_kg": 0.0,
+            "total_max_weight_kg": 0.0,
+        }
+    fill = rack_fills.get(rack.id)
+    if fill is None:
+        return {
+            "fill_percent": 0.0,
+            "volume_fill_percent": 0.0,
+            "weight_fill_percent": 0.0,
+            "used_volume_m3": 0.0,
+            "total_volume_m3": 0.0,
+            "used_weight_kg": 0.0,
+            "total_max_weight_kg": 0.0,
+        }
+    return {
+        "fill_percent": fill.volume_fill_percent,
+        "volume_fill_percent": fill.volume_fill_percent,
+        "weight_fill_percent": fill.weight_fill_percent,
+        "used_volume_m3": round(float(fill.used_volume_m3), 4),
+        "total_volume_m3": round(float(fill.total_volume_m3), 4),
+        "used_weight_kg": round(float(fill.used_weight_kg), 3),
+        "total_max_weight_kg": round(float(fill.total_max_weight_kg), 3),
+    }
 
 class WarehouseMapNotFound(Exception):
-    """Склад із таким id не існує."""
+    pass
 
+class RacksWithStockRemoved(Exception):
+    """З мапи прибрали стелажі, на полицях яких лежить товар."""
+
+    def __init__(self, rack_codes: list[str]):
+        self.rack_codes = rack_codes
+        super().__init__(
+            "Не можна видалити стелажі з товаром: "
+            f"{', '.join(rack_codes)}. Спершу відвантажте або перемістіть товар."
+        )
+
+async def _racks_with_stock(session: AsyncSession, racks: list[Rack]) -> list[str]:
+    # Стелаж видаляється з полицями каскадом, а полиці - разом із залишками (stock_item)
+    from app.stock.models import StockItem
+    from app.warehouses.models import Shelf
+
+    if not racks:
+        return []
+    codes = await session.scalars(
+        select(Rack.code)
+        .join(Shelf, Shelf.rack_id == Rack.id)
+        .join(StockItem, StockItem.shelf_id == Shelf.id)
+        .where(Rack.id.in_([rack.id for rack in racks]))
+        .distinct()
+    )
+    return sorted(codes.all())
 
 class WarehouseMapService:
-    """Сервіс роботи з картою складу (зберігання в БД)."""
-
     @staticmethod
     async def _load_warehouse(session: AsyncSession, warehouse_id: int, for_update: bool = False) -> Warehouse:
         query = (
@@ -102,7 +157,6 @@ class WarehouseMapService:
             )
         )
         if for_update:
-            #блокуємо рядок складу, щоб два одночасні збереження не перемішали топологію
             query = query.with_for_update(of=Warehouse)
         warehouse = await session.scalar(query)
         if warehouse is None:
@@ -111,9 +165,10 @@ class WarehouseMapService:
 
     @classmethod
     async def get_map(cls, session: AsyncSession, warehouse_id: int) -> dict[str, Any]:
-        """Повертає карту складу з БД."""
+        
         warehouse = await cls._load_warehouse(session, warehouse_id)
-        return cls._serialize(warehouse)
+        rack_fills = await fill_service.get_rack_fills(session, warehouse_id)
+        return cls._serialize(warehouse, rack_fills)
 
     @classmethod
     async def save_map(
@@ -122,11 +177,7 @@ class WarehouseMapService:
         warehouse_id: int,
         map_data: WarehouseMapUpdateSchema,
     ) -> dict[str, Any]:
-        """
-        PUT повністю замінює топологію. Об'єкти з відомим id оновлюються на місці
-        (щоб не губились пов'язані дані, напр. полиці стелажа), без id — створюються,
-        відсутні в запиті — видаляються.
-        """
+        
         warehouse = await cls._load_warehouse(session, warehouse_id, for_update=True)
 
         cls._sync_grid(warehouse, map_data)
@@ -142,7 +193,11 @@ class WarehouseMapService:
                         value = _to_angle(value)
                     setattr(obj, attr, value)
                 synced.append(obj)
-            #усе, що не потрапило в synced, видалить cascade delete-orphan
+            # Те, що лишилося в existing, буде видалено - стелажі з товаром не віддаємо
+            if collection == "racks":
+                loaded = await _racks_with_stock(session, list(existing.values()))
+                if loaded:
+                    raise RacksWithStockRemoved(loaded)
             setattr(warehouse, collection, synced)
 
         if warehouse.walls:
@@ -151,11 +206,12 @@ class WarehouseMapService:
                 warehouse.total_area = area
 
         await session.commit()
-        return cls._serialize(warehouse)
+        rack_fills = await fill_service.get_rack_fills(session, warehouse_id)
+        return cls._serialize(warehouse, rack_fills)
 
     @staticmethod
     def _sync_grid(warehouse: Warehouse, map_data: WarehouseMapUpdateSchema) -> None:
-        """Одна сітка на склад: оновлюємо першу, зайві прибираємо."""
+        
         if map_data.grid is None:
             warehouse.grids = []
             return
@@ -167,10 +223,7 @@ class WarehouseMapService:
 
     @staticmethod
     def _sync_walls(warehouse: Warehouse, map_data: WarehouseMapUpdateSchema) -> None:
-        """
-        Вершини зіставляються за vertex_order: так не порушується унікальність
-        (warehouse_id, vertex_order), бо INSERT нових рядків іде раніше за DELETE старих.
-        """
+        
         existing = {wall.vertex_order: wall for wall in warehouse.walls}
         walls = []
         for vertex in map_data.walls:
@@ -181,7 +234,10 @@ class WarehouseMapService:
         warehouse.walls = walls
 
     @staticmethod
-    def _serialize(warehouse: Warehouse) -> dict[str, Any]:
+    def _serialize(
+        warehouse: Warehouse,
+        rack_fills: dict[int, "fill_service.RackFill"] | None = None,
+    ) -> dict[str, Any]:
         grid = warehouse.grids[0] if warehouse.grids else None
         result: dict[str, Any] = {
             "warehouse_id": warehouse.id,
@@ -200,6 +256,11 @@ class WarehouseMapService:
                 {
                     id_field: obj.id,
                     **{schema_field: getattr(obj, attr) for schema_field, attr in fields.items()},
+                    **(
+                        _rack_fill_fields(obj, rack_fills)
+                        if collection == "racks"
+                        else {}
+                    ),
                 }
                 for obj in sorted(getattr(warehouse, collection), key=lambda o: o.id)
             ]
@@ -211,34 +272,5 @@ class WarehouseMapService:
         start: tuple[float, float],
         target: tuple[float, float],
     ) -> list[tuple[float, float]]:
-        """Ти думав тут щось буде?"""
+        
         raise NotImplementedError("Пошук маршруту ще не реалізовано")
-    # ⡅⡀⡀⡀⡀⡀⡀⢀⡀⡀⡀⢀⡀⢀⢀⡀⢀⡀⢀⡀⢀⢈⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡈⡀⡇⡀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣃⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣤⣄⣫⣝⣫⣝⣭⣭⣯⣹⡇
-    # ⠅⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⢀⡀⠠⡀⡀⡀⡀⠠⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠨⡀⡇⡀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣵⣿⣏⡮⢽⣯⣹⡅
-    # ⡂⡀⢀⢀⢀⡀⡀⡀⢀⢀⡀⢂⡀⢐⡀⢐⡂⢀⡀⢀⡀⢂⡀⢀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⢂⡀⡇⡀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣾⣿⣿⣿⡿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣻⣷⣿⣟⡳⣻⡇
-    # ⠅⡀⡀⡀⡀⡀⡀⡀⠄⡀⡀⠁⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⢀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠨⡀⡇⡀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣿⣿⣿⡿⠊⠑⠾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣻⡷⢽⡽⠆
-    # ⡆⡀⡀⡀⠠⡀⡀⠐⡐⡀⡀⠠⠠⠄⠠⡠⡐⠄⡀⡀⡀⠢⢄⠆⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠰⡀⡇⠠⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣷⣽⣿⠇⡀⡀⡀⠠⠚⠗⡻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠐⢪⢇⣺⡖⡂
-    # ⡅⡀⡀⡀⡀⡀⡀⢀⡀⡀⡀⡀⡂⢀⡀⡀⢄⡐⠠⡐⠄⠐⠈⠐⡀⡀⠄⡀⡀⡀⠠⡀⡀⡀⡀⡀⡀⡀⡀⢐⡀⡇⢈⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣿⣿⣿⡀⡀⡀⡀⡀⡀⠐⢐⠛⣿⠈⡈⡉⠉⢃⠙⢿⣿⣿⡘⡣⠦⡍⣸⠆
-    # ⡃⡀⡀⡀⠈⠈⠑⠁⠈⠁⡀⡀⡀⠁⡂⢈⡁⡀⡀⢁⢌⣈⢈⠌⠂⢡⣷⣿⣿⣦⢀⠈⡀⡀⡀⡀⡀⡀⡀⠨⡀⡇⢀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣿⣟⡀⡀⡀⡀⡀⡀⡀⡀⡀⠐⠁⡀⢈⠂⡀⡀⡀⢘⣿⣿⢂⣳⣟⣿⣿⡇
-    # ⠂⡀⠅⠁⣀⣤⣴⣶⣿⣿⣿⣿⣤⠐⠆⡰⡀⣿⢓⠬⠐⠠⠢⠦⣽⣿⣿⣿⣿⣿⣿⣧⡀⡀⡀⡀⡀⡀⡀⢐⡀⡇⠨⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡇⢸⠇⡀⡀⡀⢠⣄⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⢸⢟⠟⣵⣷⣿⣿⣿⡇
-    # ⡶⢟⣯⣳⣱⢿⣿⣿⣿⣿⣿⣿⣿⣿⢤⣤⡰⠽⣡⣿⢿⢻⣎⣫⣿⢿⣿⣿⣿⣿⣿⣿⣷⡀⡀⠄⡀⡀⡀⠨⡀⡇⡀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⢠⣾⡀⡀⡀⣤⢄⣀⠈⠙⠦⡀⡀⡀⠤⠹⠻⠿⢦⡀⡾⣾⣾⣷⣿⣿⣿⣿⡇
-    # ⣷⣳⣷⣳⣾⣖⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⢁⣼⡻⣟⣳⡾⠮⣿⣿⣿⣿⣿⣿⣿⣳⣿⣧⡀⡀⡀⡀⡀⢰⡀⡧⡀⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠈⡗⡀⡀⡀⡀⡀⠈⠐⣛⠂⡀⡀⢀⡔⣤⡤⢀⡀⠐⣾⣟⣾⣿⣿⣿⣿⣿⡇
-    # ⣗⣾⣿⣟⣿⣗⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣗⣪⣥⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣟⣿⣿⡀⠐⢀⡀⡀⢐⡀⣗⢰⠘⡀⠐⡀⡄⡀⣀⣀⡠⠤⠄⠒⠒⣠⡀⡃⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠈⠉⡀⡞⠉⠛⠛⠿⣿⣯⣿⣿⡇
-    # ⣿⣿⣿⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣷⠂⡀⡀⡀⡀⡀⣯⢸⡀⡀⡀⡀⡀⡀⡀⡀⡀⣤⣤⣾⣿⣿⡇⠁⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠃⡀⡀⡀⡀⡀⡀⡀⠐⠁
-    # ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⣿⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠐⡀⡀⢘⡀⣿⢸⠘⡀⠦⣄⣤⣾⣿⣿⣿⣿⣿⣿⣿⣿⡀⡀⡀⡀⡀⡀⡀⡀⡀⢀⡀⡀⡀⡀⡀⡀⡀⡀⡸⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀
-    # ⣿⣿⣿⣿⣿⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣿⣿⣯⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡋⠁⡀⠠⠄⠠⠠⠨⡀⢿⠸⢈⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⡇⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⠁⡀⡀⡀⡀⠠⠄⡀⡀⡀⡀
-    # ⠛⠛⠛⠛⡛⣹⠻⣿⣿⣿⣿⣿⣿⡟⣿⣿⣿⣿⣾⣿⣭⢴⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠐⡀⠄⡀⠠⠐⡀⢩⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠹⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⡦⡀⡀⡀⣌⡀⡀⠠⠄⠈⡀⡀⠄⡀⡀⠂
-    # ⣦⣾⣿⣿⣿⠍⡨⠈⣭⢭⡭⢍⡟⣿⣿⣭⣽⢿⣿⣿⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠠⠄⡀⠨⡀⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⡀⢿⡀⡀⡀⡀⠉⠙⠶⠶⠦⠄⠍⡀⡀⠸⣿⣷⣄⡀⡀⡀⡀⡀⡀⡀⡀⠁
-    # ⣿⣟⢝⡷⠛⡇⣹⣐⡨⣧⣮⣵⣽⣿⢌⢇⣛⡋⣋⣙⣛⣛⣛⡛⠛⠳⠹⣿⣿⣿⣿⣿⣿⡿⢐⠨⡀⡀⠘⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⡀⢿⡠⡀⡀⡀⡀⡀⡀⡀⡀⡀⣴⡀⡀⠈⣿⣿⣿⣄⡀⡀⡀⡀⣠⣤⡁
-    # ⣏⡣⣿⢛⣹⠣⣧⢿⡇⢏⠻⡺⠿⡳⡻⠯⢿⣾⡷⡳⢷⣾⢾⡩⣓⣤⢶⣾⣿⡆⣿⣿⣿⠠⠨⠌⠌⢠⡀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⡀⠻⣆⡀⡀⡀⡀⡀⣴⣀⣾⣿⣷⡀⡀⡀⢸⣿⣿⣿⣤⠺⣽⠻⠄⠃
-    # ⣯⠚⡣⡀⣼⡥⣿⡼⡷⣱⠒⠙⠛⠺⣻⣿⣿⣯⠼⠯⠽⢦⣮⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠨⡨⢌⠄⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣄⣉⣲⣴⣦⣽⣾⠏⡀⠙⢿⡀⡀⡀⡀⣿⣿⣿⣿⣿⡄⡀⠉⠃
-    # ⣟⡀⡏⡀⣿⣪⡿⣫⣭⣧⣾⣶⣳⣭⣽⣿⣿⣿⣿⣿⣿⣿⠿⠟⣉⣩⣬⣍⠿⣿⣿⣿⣿⣿⣄⡌⢌⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃⢠⡀⡀⡀⠁⡀⡀⡀⢹⣿⣿⣿⣿⣿⡀⡀⡀
-    # ⣿⣻⡤⡐⣿⣿⣃⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣝⢻⣋⣜⣞⣳⣾⣞⣺⣿⣹⣿⣿⣿⢘⡀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⡀⠈⡀⡀⡀⡀⡀⡀⡀⣿⣿⣿⣿⣿⣿⡀⠂
-    # ⣿⢸⣷⣳⣿⣿⣿⣿⣿⡿⣻⣻⡿⣿⣿⣿⣿⣼⣿⣿⡿⣿⣺⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⡀⠂⡀⡀⡀⡀⡀⡀⡀⡀⡀⢿⣿⣿⣿⣿⣿⡟⠆
-    # ⣟⡼⣻⣿⣿⣿⣿⣛⣫⣽⣯⣿⡯⢟⣿⣯⣿⣿⣽⣯⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠙⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⡏⡶⡄⡀⡀⡀⡀⡀⡀⡀⡀⡀⡀⣼⣿⣿⣿⣿⣿⣧⡀
-    # ⣽⣿⣿⣿⣿⠿⠽⢽⣯⣭⣽⣷⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣒⣿⣿⣿⣿⣿⣿⣿⣿⣿⢡⡟⣠⠧⠄⡀⡀⡀⡀⡀⡀⡀⡀⡀⢀⣿⣿⣿⣿⣿⣿⣿⡀
-    # ⣿⡿⣯⣺⣳⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢹⠛⢿⠿⣧⡟⣿⣿⣿⣿⢧⢱⠁⡀⡅⡇⡀⡀⡀⡀⡀⡀⡀⡀⡀⣼⣿⣿⣿⣿⣿⣿⣿⡀
-    # ⣿⣿⣿⣿⣟⣿⣿⣿⣿⣹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢰⣰⣡⣿⣸⣿⢳⣷⣿⣿⡏⣼⡟⠸⣰⠷⢻⡀⡀⡀⡀⡀⡀⡀⡀⡀⣿⣿⣿⣿⣿⣿⣿⣿⡀
-    # ⣿⣿⡿⣽⣿⣷⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣿⣿⣿⣬⣼⡇⡀⣿⡇⣘⣷⡀⡀⡀⡀⡀⡀⡀⡀⠸⣿⣿⣿⣿⣿⣿⣿⡀
-    # ⣿⣿⣳⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠏⣼⣿⣟⣥⣧⣷⣿⣿⣯⠠⢸⢻⡀⣿⣾⣷⡀⡀⡀⡀⡀⡀⡀⡀⣿⣿⣿⣿⣿⣿⡿⡀
-    # ⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠻⠿⠟⠛⠛⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠷⠿⠿⠿⠿⠰⠾⠿⠫⠿⠿⠿⠿⡀⡀⡀⡀⡀⡀⡀⠘⠿⠿⠿⠿⠿⠧⠇

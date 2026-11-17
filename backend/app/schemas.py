@@ -8,29 +8,21 @@ from app.core.enums import ObstacleType, PointType, ZoneType
 
 from app.users.schemas import normalize_and_validate_email
 
-# Формат мапи узгоджений із фронтом (frontend/API.md, розділ «Мапа складу»).
-# Одиниці — метри, coord_x/coord_y — центр об'єкта, rotation_angle — градуси за годинниковою стрілкою.
-# length — розмір уздовж власної осі X об'єкта (до повороту), width — уздовж осі Y.
-
-#обмеження (у JSON віддаються числом, а не рядком "8.00")
 _as_number = PlainSerializer(float, return_type=float, when_used="json")
 Numeric_MAX_8_2 = Annotated[Decimal, condecimal(max_digits=8, decimal_places= 2), _as_number]
 Numeric_MAX_10_2 = Annotated[Decimal, condecimal(max_digits=10, decimal_places= 2), _as_number]
 Numeric_MAX_5_2 = Annotated[Decimal, condecimal(max_digits=5, decimal_places= 2), _as_number]
 
-#схема для сітки складу (одна сітка на склад)
 class GridSchema(BaseModel):
     cell_size: Numeric_MAX_8_2 = Field(Decimal("1.0"), gt=0, description="Розмір клітинки сітки")
     grid_width: Numeric_MAX_10_2 = Field(..., gt=0, description="Ширина сітки")
     grid_height: Numeric_MAX_10_2 = Field(..., gt=0, description="Висота сітки")
 
-#схема для вершини контуру приміщення (по внутрішній грані стіни)
 class WallSchema(BaseModel):
    vertex_order: int = Field(..., ge=1, description="Порядковий номер вершини")
    coord_x: Numeric_MAX_8_2 = Field(..., description="Координата Х вершини")
    coord_y: Numeric_MAX_8_2 = Field(..., description="Координата Y вершини")
 
-#схема для внутрішньої перегородки (відрізок по осьовій лінії стіни)
 class PartitionSchema(BaseModel):
     partition_id: int | None = None
     start_x: Numeric_MAX_8_2 = Field(..., description="Координата Х початку")
@@ -38,7 +30,7 @@ class PartitionSchema(BaseModel):
     end_x: Numeric_MAX_8_2 = Field(..., description="Координата Х кінця")
     end_y: Numeric_MAX_8_2 = Field(..., description="Координата Y кінця")
     thickness: Numeric_MAX_5_2 = Field(Decimal("0.20"), gt=0, description="Товщина перегородки")
-    height: Numeric_MAX_8_2 | None = Field(None, gt=0, description="Висота; null — до стелі")
+    height: Numeric_MAX_8_2 | None = Field(None, gt=0, description="Висота; null - до стелі")
 
     @model_validator(mode = "after")
     def must_have_length(self):
@@ -46,7 +38,6 @@ class PartitionSchema(BaseModel):
             raise ValueError("Перегородка має нульову довжину")
         return self
 
-#схема для перешкоди (колона, стовп)
 class ObstacleSchema(BaseModel):
     obstacle_id: int | None = None
     obstacle_name: str | None = Field(None, max_length=100, description="Назва перешкоди")
@@ -58,14 +49,12 @@ class ObstacleSchema(BaseModel):
     rotation_angle: float = Field(0.0, ge=0, lt=360, description="Кут повороту в градусах [0, 360)")
     max_height: Numeric_MAX_8_2 | None = Field(None, gt=0, description="Максимальна висота")
 
-#схема для точки приймання / відвантаження
 class EntryPointSchema(BaseModel):
     point_id: int | None = None
     point_name: str = Field(...,min_length=1, max_length= 100, description="Навза точки" )
     point_type: PointType = Field(..., description="Тип точки: inbound, outbound, general_entry")
     coord_x: Numeric_MAX_8_2 = Field(..., description="Координата Х")
     coord_y: Numeric_MAX_8_2 = Field(..., description="Координата Y")
-#схема для стелажа 
 class RackSchema(BaseModel):
     rack_id: int | None = None
     rack_code: str = Field(..., min_length = 1, description = "Унікальний код стелажа")
@@ -75,8 +64,14 @@ class RackSchema(BaseModel):
     length: Numeric_MAX_8_2 = Field(..., gt=0, description="Довжина стелажа")
     rotation_angle: float = Field(0.0, ge=0, lt=360, description="Кут повороту в градусах [0, 360)")
     shelves_count: int = Field(..., ge=1, description="Кількість полиць")
+    fill_percent: float | None = None
+    volume_fill_percent: float | None = None
+    weight_fill_percent: float | None = None
+    used_volume_m3: float | None = None
+    total_volume_m3: float | None = None
+    used_weight_kg: float | None = None
+    total_max_weight_kg: float | None = None
 
-#схема для складських зон
 class ZoneSchema(BaseModel):
     zone_id: int | None = None
     zone_name: str = Field(..., min_length = 1, max_length = 100, description = "Назва зони")
@@ -88,15 +83,13 @@ class ZoneSchema(BaseModel):
     rotation_angle: float = Field(0.0, ge=0, lt=360, description="Кут повороту в градусах [0, 360)")
     max_capacity_m3: Numeric_MAX_10_2 | None = Field(None, gt=0, description="Максимальна місткість у м3")
 
-
 def _segments_cross(a, b, c, d) -> bool:
-    """Чи перетинаються відрізки ab і cd усередині (дотик кінцями не рахується)."""
+    
     def orient(p, q, r):
         v = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
         return (v > 0) - (v < 0)
     return orient(a, b, c) * orient(a, b, d) < 0 and orient(c, d, a) * orient(c, d, b) < 0
 
-#головна схема, яка об'єднує всю карту складу для збереження (put/post)
 class WarehouseMapUpdateSchema(BaseModel):
     grid: GridSchema | None = None
     walls: list[WallSchema] = Field(default_factory=list)
@@ -106,7 +99,6 @@ class WarehouseMapUpdateSchema(BaseModel):
     racks: list [RackSchema] = Field(default_factory=list)
     zones: list [ZoneSchema] = Field(default_factory=list)
 
-    #приклад (автоматично при тестувані у свагері підставляє у тіло запроса готовий json приклад)
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -139,15 +131,10 @@ class WarehouseMapUpdateSchema(BaseModel):
         }
     }
 
-    #контур стін (перевірки, щоб був простий полігон із мінімум 3 вершин)
     @field_validator("walls")
     @classmethod
     def walls_must_form_polygon(cls, value):
-        """
-        Перевіряє, що контур стін є простим полігоном: мінімум 3 вершини,
-        унікальні vertex_order, без самоперетинів, площа (за vertex_order) додатна.
-        Дозволяє передавати порожній список, якщо контур ще не намальований.
-        """
+        
         if not value:
             return value
         if len(value) < 3:
@@ -183,20 +170,18 @@ class WarehouseMapUpdateSchema(BaseModel):
             raise ValueError(f"Повторюються коди стелажів: {','.join(sorted(duplicates))}")
         return self
 
-#відповідь get: карта + ідентифікатор складу
 class WareHouseMapSchema(WarehouseMapUpdateSchema):
     warehouse_id: int
 
-#схеми для токена та логіну 
 class UserLoginSchema(BaseModel):
-    """Тіло запиту на вхід. Валідація — до звернення до БД."""
+    
 
     email: EmailStr = Field(..., description="Робоча пошта")
     password: str = Field(
         ...,
         min_length=1,
         max_length=128,
-        description="Пароль (перевірка складності — на етапі створення)",
+        description="Пароль (перевірка складності - на етапі створення)",
     )
 
     @field_validator("email")
@@ -211,15 +196,13 @@ class UserLoginSchema(BaseModel):
             raise ValueError("Пароль занадто довгий (максимум 72 байти)")
         return value
 
-
 class TokenSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int = 0
 
-
 class AuthUserSchema(BaseModel):
-    """Профіль користувача, який повертається разом із токеном."""
+    
 
     user_id: int
     user_email: str
@@ -227,14 +210,11 @@ class AuthUserSchema(BaseModel):
     last_name: str
     role: str
     status: str
-    # null — користувач не прив'язаний до складу (адміністратор або ще не призначений менеджер)
     warehouse_id: int | None
     permissions: dict[str, bool]
 
-
 class AuthResponseSchema(TokenSchema):
     user: AuthUserSchema
-
 
 class ProfileSchema(AuthUserSchema):
     created_at: datetime

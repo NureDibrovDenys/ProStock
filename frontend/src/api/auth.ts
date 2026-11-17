@@ -8,7 +8,7 @@ interface TokenResponse {
   user: AuthUser;
 }
 
-/** POST /api/v1/auth/login — вхід; refresh-токен приходить у httpOnly cookie. */
+/** POST /api/v1/auth/login - вхід; refresh-токен приходить у httpOnly cookie. */
 export async function login(email: string, password: string): Promise<Session> {
   const data = await request<TokenResponse>('/auth/login', {
     method: 'POST',
@@ -19,7 +19,7 @@ export async function login(email: string, password: string): Promise<Session> {
   return { user: data.user, expiresAt: Date.now() + data.expires_in * 1000 };
 }
 
-/** POST /api/v1/auth/logout — відкликає refresh-токен на сервері. */
+/** POST /api/v1/auth/logout - відкликає refresh-токен на сервері. */
 export async function logout(): Promise<void> {
   try {
     await request('/auth/logout', { method: 'POST', auth: false });
@@ -31,5 +31,5 @@ export async function logout(): Promise<void> {
   }
 }
 
-/** GET /api/v1/auth/me — актуальний профіль (роль, права, статус). */
+/** GET /api/v1/auth/me - актуальний профіль (роль, права, статус). */
 export const getProfile = () => request<AuthUser & { created_at: string }>('/auth/me');

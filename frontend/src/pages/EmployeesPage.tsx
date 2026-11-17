@@ -7,8 +7,8 @@ import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Avatar, ErrorState, LoadingState, PageHeader, UserStatusBadge } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
-import { getWarehouses } from '../api/warehouse';
 import { Select } from '../components/Select';
+import { selectWarehouse, useCurrentWarehouse, useWarehouses } from '../hooks/useCurrentWarehouse';
 
 import styles from './EmployeesPage.module.css';
 import { AssignWarehouseModal } from '../components/AssignWarehouseModal';
@@ -21,13 +21,14 @@ export function EmployeesPage() {
   // Менеджер складу бачить і редагує лише комірників свого складу
   const isManagerMode = !can('users_manage') && can('storekeepers_manage');
 
-  /**стан фільтра та запит складів (список складів доступний лише адміністратору) */
-  const [warehouseFilter, setWarehouseFilter] = useState('');
-  const warehousesQuery = useQuery({
-    queryKey: ['warehouses'],
-    queryFn: getWarehouses,
-    enabled: !isManagerMode,
-  });
+  /**
+   * Фільтр за складом іде за перемикачем поточного складу в навбарі: вибір складу тут теж
+   * перемикає поточний. «Усі склади» - окремий режим, що не змінює поточний склад.
+   */
+  const currentWarehouseId = useCurrentWarehouse();
+  const [showAllWarehouses, setShowAllWarehouses] = useState(false);
+  const warehouseFilter = showAllWarehouses || currentWarehouseId === null ? '' : String(currentWarehouseId);
+  const warehousesQuery = useWarehouses(!isManagerMode);
   const warehouses = warehousesQuery.data ?? [];
 
   const [assignmentUser, setAssignmentUser] = useState<User | null>(null);
@@ -64,7 +65,11 @@ export function EmployeesPage() {
           <Select
             label="Фільтр за складом"
             value={warehouseFilter}
-            onChange={(event) => setWarehouseFilter(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setShowAllWarehouses(value === '');
+              if (value !== '') selectWarehouse(Number(value));
+            }}
             disabled={!warehousesQuery.isSuccess}
           >
             <option value="">Усі склади</option>
@@ -112,7 +117,7 @@ export function EmployeesPage() {
           <section className={styles.all}>
             <h2 className={styles.allTitle}>Усі співробітники</h2>
             {users.length === 0 ? (
-              <p className={styles.muted}>{warehouseFilter === '' ? 'Співробітників ще немає — додайте першого.' : 'На цьому складі немає співробітників.'}</p>
+              <p className={styles.muted}>{warehouseFilter === '' ? 'Співробітників ще немає - додайте першого.' : 'На цьому складі немає співробітників.'}</p>
             ) : (
               <ul className={styles.rows}>
                 {users.map((u) => (

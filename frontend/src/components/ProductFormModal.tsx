@@ -387,7 +387,7 @@ export function ProductFormModal({
             value={form.min_stock_level}
             onChange={(e) => update('min_stock_level', e.target.value)}
             error={errors.min_stock_level}
-            hint="Порожнє поле — контроль залишку вимкнено"
+            hint="Порожнє поле - контроль залишку вимкнено"
           />
         </div>
 

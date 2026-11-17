@@ -1,6 +1,4 @@
-"""
-CRUD operations for inbound orders
-"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -13,14 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.interfaces import LoaderOption
 
-from app.core.enums import OrderStatus
+from app.core.enums import OrderStatus, SupplierStatus
 from app.orders.models import InboundOrder, InboundOrderItem
 from app.orders.schemas import (
     InboundOrderUpdate,
     InboundOrderCreate
 )
 from app.products.models import Product, Supplier
-
+from app.warehouses.models import Warehouse
 
 class InboundOrderNotFoundError(Exception):
     pass
@@ -28,7 +26,21 @@ class InboundOrderNotFoundError(Exception):
 class SupplierNotFoundError(Exception):
     pass
 
+class SupplierNotActiveError(Exception):
+    pass
+
+def _ensure_supplier_active(supplier: Supplier) -> None:
+    # Неактивний (архів) або заблокований постачальник не бере участі в нових поставках
+    if supplier.status != SupplierStatus.ACTIVE:
+        raise SupplierNotActiveError(
+            f"Постачальник «{supplier.company_name}» має статус «{supplier.status.value}» - "
+            "оберіть активного постачальника"
+        )
+
 class ProductNotFoundError(Exception):
+    pass
+
+class WarehouseNotFoundError(Exception):
     pass
 
 class InvoiceNumberAlreadyExistsError(Exception):
@@ -43,10 +55,7 @@ async def get_inbound_order(
     *,
     options: Sequence[LoaderOption] | None = None,
 ) -> InboundOrder:
-    """
-    Returns the incoming invoice by ID,
-    along with the supplier and line items, or None.
-    """
+    
     if options is None:
         options = [
             joinedload(
@@ -64,6 +73,7 @@ async def get_inbound_order(
         select(InboundOrder)
         .where(InboundOrder.id == inbound_order_id)
         .options(*options)
+        .execution_options(populate_existing=True)
     )
     return inbound_order
 
@@ -73,16 +83,17 @@ async def list_inbound_orders(
     search: str | None = None,
     order_status: OrderStatus | None = None,
     supplier_id: int | None = None,
+    warehouse_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[InboundOrder], int]:
-    """
-    Returns a page of incoming invoices and the total count.
-    """
+    
     conditions: list = []
     
     if supplier_id is not None:
         conditions.append(InboundOrder.supplier_id == supplier_id)
+    if warehouse_id is not None:
+        conditions.append(InboundOrder.warehouse_id == warehouse_id)
     if order_status is not None:
         conditions.append(InboundOrder.order_status == order_status)
     
@@ -92,10 +103,7 @@ async def list_inbound_orders(
             or_(InboundOrder.invoice_number.ilike(pattern))
         )
     
-    count_stmt = select(
-        func.count(InboundOrder.id)
-        .where(*conditions)
-    )
+    count_stmt = select(func.count(InboundOrder.id)).where(*conditions)
     count_result = await session.scalar(count_stmt)
     total: int = count_result or 0
     
@@ -123,9 +131,7 @@ async def create_inbound_order(
     data: InboundOrderCreate,
     created_by_user_id: int,
 ) -> InboundOrder:
-    """
-    Creates a new incoming invoice along with the line items.
-    """
+    
     supplier: Supplier | None = await session.get(
         Supplier, data.supplier_id
     )
@@ -133,7 +139,14 @@ async def create_inbound_order(
         raise SupplierNotFoundError(
             f"Supplier with ID {data.supplier_id} not found"
         )
-    
+    _ensure_supplier_active(supplier)
+
+    warehouse = await session.get(Warehouse, data.warehouse_id)
+    if warehouse is None:
+        raise WarehouseNotFoundError(
+            f"Warehouse with ID {data.warehouse_id} not found"
+        )
+
     product_ids: list[int] = [item.product_id for item in data.items]
     if product_ids:
         found_products = await session.scalars(
@@ -149,6 +162,7 @@ async def create_inbound_order(
     
     inbound_order: InboundOrder = InboundOrder(
         supplier_id=data.supplier_id,
+        warehouse_id=data.warehouse_id,
         invoice_number=data.invoice_number,
         expected_delivery_date=data.expected_delivery_date,
         order_status=data.order_status,
@@ -172,12 +186,10 @@ async def create_inbound_order(
     except IntegrityError as e:
         await session.rollback()
         
-        # Check if this specifically a uniqueness violation for
-        # invoice number (code 23505 for PostgresSQL)
-        original_error = getattr(e, "original_error", None)
+        original_error = getattr(e, "orig", None)
         if (
             original_error
-            and getattr(original_error, "original_name", None) == "23505"
+            and getattr(original_error, "sqlstate", None) == "23505"
         ):
             raise InvoiceNumberAlreadyExistsError(
                 f"Invoice number '{inbound_order.invoice_number}' already exists"
@@ -194,9 +206,7 @@ async def update_inbound_order(
     inbound_order: InboundOrder,
     data: InboundOrderUpdate,
 ) -> InboundOrder:
-    """
-    Partially updates the incoming invoice and its line items.
-    """
+    
     update_data: dict[str, Any] = data.model_dump(exclude_unset=True)
     items_data: list[dict[str, Any]] | None = update_data.pop("items", None)
     
@@ -211,7 +221,20 @@ async def update_inbound_order(
             raise SupplierNotFoundError(
                 f"Supplier with ID {update_data['supplier_id']} not found"
             )
-        
+        _ensure_supplier_active(supplier)
+
+    if (
+        "warehouse_id" in update_data
+        and update_data["warehouse_id"] != inbound_order.warehouse_id
+    ):
+        warehouse: Warehouse | None = await session.get(
+            Warehouse, update_data["warehouse_id"]
+        )
+        if warehouse is None:
+            raise WarehouseNotFoundError(
+                f"Warehouse with ID {update_data['warehouse_id']} not found"
+            )
+    
     if (
         "invoice_number" in update_data
         and update_data["invoice_number"] != inbound_order.invoice_number
@@ -232,7 +255,8 @@ async def update_inbound_order(
         setattr(inbound_order, field, value)
     
     if items_data is not None:
-        product_ids = [item.product_id for item in items_data]
+        # model_dump() перетворив позиції на dict, атрибутного доступу в них немає
+        product_ids = [item["product_id"] for item in items_data]
         if product_ids:
             found_products = await session.scalars(
                 select(Product.id)
@@ -271,10 +295,7 @@ async def delete_inbound_order(
     session: AsyncSession,
     inbound_order: InboundOrder,
 ) -> None:
-    """
-    Deletes the incoming invoice
-    (only if its status is DRAFT or CANCELLED).
-    """
+    
     if (
         inbound_order.order_status not in (
             OrderStatus.DRAFT, OrderStatus.CANCELED

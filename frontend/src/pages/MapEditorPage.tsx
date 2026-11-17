@@ -1,7 +1,7 @@
 // Конструктор складу (2D-мапа). Перенесено з прототипу тіммейта на React + TypeScript:
 // контур приміщення полігоном (з редагуванням вершин), внутрішні перегородки, стелажі з поворотом
 // і пресетами, перешкоди, зони, точки входу, перевірка колізій і виходу за контур, undo/redo.
-// Збереження — PUT /warehouses/{id}/map.
+// Збереження - PUT /warehouses/{id}/map.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
@@ -77,17 +77,17 @@ const TOOLS: Array<{ id: Tool; key: string; name: string; icon: string }> = [
 
 const HINTS: Record<Tool, string> = {
   select:
-    'Клік — вибір · Shift+клік — додати до виділення · Shift+рамка — виділити кілька · Ctrl+A — усе · перетягування — переміщення · ⟳ над об’єктом — поворот (Shift — без кроку 15°) · контур: тягніть вершину, «+» — нова вершина, ребро — зсув · Del — видалити · Ctrl+Z — скасувати',
+    'Клік - вибір · Shift+клік - додати до виділення · Shift+рамка - виділити кілька · Ctrl+A - усе · перетягування - переміщення · ⟳ над об’єктом - поворот (Shift - без кроку 15°) · контур: тягніть вершину, «+» - нова вершина, ребро - зсув · Del - видалити · Ctrl+Z - скасувати',
   pan: 'Перетягуйте, щоб рухати полотно (також: середня кнопка або Пробіл)',
-  wall: 'Клік — вершина контуру · Shift — кут 45°/90° · Backspace — прибрати останню · Enter або клік на першу точку — замкнути · Esc — скасувати',
+  wall: 'Клік - вершина контуру · Shift - кут 45°/90° · Backspace - прибрати останню · Enter або клік на першу точку - замкнути · Esc - скасувати',
   partition:
-    'Клік — початок, клік — кінець (далі ланцюжком) · без сітки, з прив’язкою до стін і вершин · біля стіни показано кут до неї · Shift — кут 45°/90° · Enter — новий ланцюжок · Esc — вийти',
-  rack: 'Клік — поставити стелаж за пресетом · потягніть — власний розмір (кількість полиць із пресету)',
+    'Клік - початок, клік - кінець (далі ланцюжком) · без сітки, з прив’язкою до стін і вершин · біля стіни показано кут до неї · Shift - кут 45°/90° · Enter - новий ланцюжок · Esc - вийти',
+  rack: 'Клік - поставити стелаж за пресетом · потягніть - власний розмір (кількість полиць із пресету)',
   obst: 'Затисніть і потягніть, щоб додати перешкоду (колона, ніша, техзона)',
   zin: 'Затисніть і потягніть, щоб задати зону приймання',
   zstore: 'Затисніть і потягніть, щоб задати зону зберігання',
   zout: 'Затисніть і потягніть, щоб задати зону відвантаження',
-  entry: 'Клік — поставити точку входу/виходу',
+  entry: 'Клік - поставити точку входу/виходу',
 };
 
 /** Масштаб, що відповідає 100% (пікселів на метр). */
@@ -98,9 +98,9 @@ const MAGNET_PX = 10;
 const HISTORY_LIMIT = 100;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-/** Ручне введення — не більше 3 знаків після коми. */
+/** Ручне введення - не більше 3 знаків після коми. */
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
-/** Поворот ручкою: крок 15°, із Shift — 0,5°. */
+/** Поворот ручкою: крок 15°, із Shift - 0,5°. */
 const ROTATE_STEP = 15;
 
 export function MapEditorPage() {
@@ -130,6 +130,8 @@ export function MapEditorPage() {
   }
   return (
     <Editor
+      // Інший склад (перемикач адміністратора) - новий редактор із власною історією undo
+      key={warehouseId}
       initial={query.data ? fromApi(query.data) : []}
       loadError={query.isError ? query.error : null}
       onRetry={() => query.refetch()}
@@ -146,9 +148,9 @@ type PartitionDrag = { id: string; mode: 'start' | 'end' };
  * До сітки прилипає об'єкт під курсором (anchor), решта зсуваються на той самий вектор.
  */
 type GroupDrag = { anchor: string; origin: Point; starts: Map<string, Point[]>; delta: Point; moved: boolean };
-/** Рамка виділення; base — що було виділено до неї (рамка додає до виділення). */
+/** Рамка виділення; base - що було виділено до неї (рамка додає до виділення). */
 type Marquee = { from: Point; to: Point; base: string[] };
-/** record — окремий крок історії; drag — один крок на весь жест перетягування. */
+/** record - окремий крок історії; drag - один крок на весь жест перетягування. */
 type HistoryMode = 'record' | 'drag';
 /** Що не враховувати під час прив'язки (сам об'єкт, який зараз тягнуть). */
 type MagnetExclude = { roomVertex?: number; partitionId?: string };
@@ -169,7 +171,7 @@ function Editor({
 
   const [objs, setObjsRaw] = useState<MapObject[]>(initial);
   const [tool, setTool] = useState<Tool>('pan');
-  // Виділення: один об'єкт — панель властивостей і ручки, кілька — групові дії
+  // Виділення: один об'єкт - панель властивостей і ручки, кілька - групові дії
   const [selIds, setSelIds] = useState<string[]>([]);
   const sel = selIds.length === 1 ? selIds[0] : null;
   const setSel = (id: string | null) => setSelIds(id ? [id] : []);
@@ -277,7 +279,7 @@ function Editor({
   const updPartition = (id: string, patch: Partial<PartitionObject>, mode: HistoryMode = 'record') =>
     setObjs((os) => os.map((o) => (o.id === id && isPartition(o) ? { ...o, ...patch } : o)), mode);
 
-  /** Змінює контур, лише якщо результат — простий полігон (без самоперетинів). */
+  /** Змінює контур, лише якщо результат - простий полігон (без самоперетинів). */
   const tryRoomPts = (pts: Point[], mode: HistoryMode = 'record', error?: string) => {
     if (!isSimplePolygon(pts)) {
       if (error) flash(error);
@@ -293,7 +295,7 @@ function Editor({
     setSelVertex(null);
   };
 
-  /** Повертає виділені фігури й перегородки навколо спільного центру (центр — на сітці, щоб 90° не збивали крок). */
+  /** Повертає виділені фігури й перегородки навколо спільного центру (центр - на сітці, щоб 90° не збивали крок). */
   const rotateGroup = (ids: string[], deg: number) => {
     const items = objsRef.current.filter((o) => ids.includes(o.id));
     const pts = items.flatMap((o) => (isShape(o) ? corners(o) : isPartition(o) ? [o.start, o.end] : []));
@@ -377,7 +379,7 @@ function Editor({
 
   /**
    * Пріоритет: вершини та кінці перегородок → кут від попередньої точки (Shift) → стіни →
-   * вирівнювання по осях з вершинами → сітка (або 1 см, якщо fine — для перегородок).
+   * вирівнювання по осях з вершинами → сітка (або 1 см, якщо fine - для перегородок).
    */
   const snapPoint = (
     raw: Point,
@@ -477,7 +479,7 @@ function Editor({
       if (/INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName)) return;
       const s = S.current;
       const key = e.key;
-      // e.code — щоб Ctrl+Z працював і в українській розкладці
+      // e.code - щоб Ctrl+Z працював і в українській розкладці
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) {
         e.preventDefault();
         return e.code === 'KeyY' || e.shiftKey ? redo() : undo();
@@ -599,7 +601,7 @@ function Editor({
       const o = id ? objs.find((x) => x.id === id) : undefined;
       const additive = e.shiftKey || e.ctrlKey || e.metaKey;
       setSelVertex(null);
-      // Shift/Ctrl по порожньому місці або підлозі приміщення — рамка виділення
+      // Shift/Ctrl по порожньому місці або підлозі приміщення - рамка виділення
       if (additive && (!o || isRoom(o))) {
         setMarquee({ from: p, to: p, base: selIds });
         capture();
@@ -763,7 +765,7 @@ function Editor({
   const up = (e: ReactPointerEvent) => {
     vp.endPan(e);
     const g = groupDrag.current;
-    // Клік без перетягування по об'єкту з групи — залишити виділеним лише його
+    // Клік без перетягування по об'єкту з групи - залишити виділеним лише його
     if (g && !g.moved && selIds.length > 1) setSel(g.anchor);
     groupDrag.current = null;
     if (marquee) {
@@ -817,7 +819,7 @@ function Editor({
   const mutation = useMutation({
     mutationFn: (map: WarehouseMap) => saveWarehouseMap(warehouseId, map),
     onSuccess: (saved, sent) => {
-      // Бекенд повертає мапу з id нових об'єктів; якщо ні — кешуємо надіслане
+      // Бекенд повертає мапу з id нових об'єктів; якщо ні - кешуємо надіслане
       queryClient.setQueryData(['map', warehouseId], saved ?? sent);
       queryClient.invalidateQueries({ queryKey: ['racks', warehouseId] });
       setDirty(false);
@@ -901,7 +903,7 @@ function Editor({
 
   // ── Кут перегородки до стіни ─────────────────────────────────────────────
 
-  /** Кут до стіни біля початку перегородки, а якщо початок вільний — біля кінця. */
+  /** Кут до стіни біля початку перегородки, а якщо початок вільний - біля кінця. */
   const partitionWallAngle = (p: PartitionObject): { end: 'start' | 'end'; info: EdgeAngle } | null => {
     const edges = magnetEdges({ partitionId: p.id });
     const atStart = angleToEdge(p.start, p.end, edges);
@@ -1057,7 +1059,7 @@ function Editor({
                     const b = room.pts[(i + 1) % room.pts.length];
                     const len = dist(a, b);
                     const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-                    // Підпис довжини — із зовнішнього боку стіни
+                    // Підпис довжини - із зовнішнього боку стіни
                     const off = 14 / k / (len || 1);
                     const lx = mid[0] + roomDirection * (b[1] - a[1]) * off;
                     const ly = mid[1] - roomDirection * (b[0] - a[0]) * off;
@@ -1379,7 +1381,7 @@ function RotateHandle({ o, k }: { o: ShapeObject; k: number }) {
   return (
     <g transform={`translate(${o.x} ${o.y}) rotate(${o.a})`}>
       <g data-handle="rotate" style={{ cursor: 'grab' }}>
-        <title>Поворот (Shift — без кроку 15°)</title>
+        <title>Поворот (Shift - без кроку 15°)</title>
         <circle cy={cy} r={sw(10)} fill="#fff" stroke="var(--map-acc)" strokeWidth={sw(2)} />
         <text
           y={cy}
@@ -1438,7 +1440,7 @@ function objectsInRect(objs: MapObject[], a: Point, b: Point): string[] {
     .filter((o) => {
       if (isPartition(o)) return inside(o.start) && inside(o.end);
       if (!isShape(o)) return false;
-      // Точка входу — за центром, решта — усіма кутами з урахуванням повороту
+      // Точка входу - за центром, решта - усіма кутами з урахуванням повороту
       return o.t === 'entry' ? inside([o.x, o.y]) : corners(o).every(inside);
     })
     .map((o) => o.id);
@@ -1671,7 +1673,7 @@ function PartitionProperties({
   onDelete,
 }: {
   p: PartitionObject;
-  /** Кут до стіни, до якої прикріплена перегородка; null — не прикріплена. */
+  /** Кут до стіни, до якої прикріплена перегородка; null - не прикріплена. */
   wallAngle: number | null;
   conflict: boolean;
   onChange: (patch: Partial<PartitionObject>) => void;
@@ -1714,7 +1716,7 @@ function PartitionProperties({
         onCommit={(h) => onChange({ height: h > 0 ? h : null })}
         onClear={() => onChange({ height: null })}
       />
-      <p className={styles.muted}>Порожня висота — перегородка до стелі.</p>
+      <p className={styles.muted}>Порожня висота - перегородка до стелі.</p>
       {conflict && <div className={styles.conflict}>⚠ Перетин зі стелажем або вихід за межі приміщення</div>}
       <button type="button" className={cx(styles.btn, styles.btnDanger)} onClick={onDelete}>
         Видалити

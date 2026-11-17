@@ -1,0 +1,249 @@
+/* Панель фільтрів (поки неактивна) */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.pills {
+  display: flex;
+  gap: 10px;
+}
+
+.pill {
+  padding: 5px 14px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--color-primary);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.pill:hover {
+  background: var(--color-primary-soft);
+}
+
+.pillActive {
+  background: var(--color-primary);
+  border-color: #000;
+  color: var(--color-on-primary);
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+select.control {
+  min-width: 150px;
+}
+
+.dates {
+  min-width: 190px;
+}
+
+.dateInput {
+  padding: 0 10px;
+}
+
+.dateInput input {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 306px;
+  margin-left: auto;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  color: var(--color-muted);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+}
+
+/* Порожній стан */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 64px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.emptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-text);
+}
+
+.emptyTitle {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.emptyText {
+  max-width: 400px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Рядки накладних */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.row:hover {
+  border-color: var(--color-primary);
+}
+
+.kind {
+  flex-shrink: 0;
+  width: 84px;
+  font-size: 12px;
+  color: var(--color-primary);
+}
+
+.main,
+.date {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.main {
+  flex: 1;
+}
+
+.number {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.date {
+  width: 120px;
+  font-size: 13px;
+}
+
+/* Статус накладної */
+.status {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--color-neutral-bg);
+  color: var(--color-muted);
+}
+
+.status-in_progress,
+.status-ready {
+  background: #f0eba8;
+  color: #5c5413;
+}
+
+.status-completed {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.status-canceled {
+  background: #f6d6d6;
+  color: var(--color-danger);
+}
+
+@media (max-width: 720px) {
+  .search {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .row {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+
+  .kind {
+    width: auto;
+  }
+
+  .main {
+    flex-basis: 100%;
+    order: -1;
+  }
+}

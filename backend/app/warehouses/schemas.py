@@ -1,12 +1,9 @@
-"""
-Pydantic-схеми для API складів.
-"""
+
 from __future__ import annotations
 
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
-
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 class WarehouseBase(BaseModel):
     name: str = Field(
@@ -43,13 +40,11 @@ class WarehouseBase(BaseModel):
             return stripped or None
         return v
 
-
 class WarehouseCreate(WarehouseBase):
-    """Тіло запиту для створення нового складу."""
-
+    pass
 
 class WarehouseUpdate(BaseModel):
-    """Тіло запиту для часткового оновлення складу (всі поля необов'язкові)."""
+    
 
     name: str | None = Field(
         default=None,
@@ -90,9 +85,15 @@ class WarehouseUpdate(BaseModel):
             return stripped or None
         return v
 
+    @model_validator(mode="after")
+    def required_fields_not_null(self) -> "WarehouseUpdate":
+        for field in ("name", "total_area"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"Поле {field} не може бути null")
+        return self
 
 class WarehouseResponse(BaseModel):
-    """Відповідь з даними складу."""
+    
 
     warehouse_id: int
     warehouse_name: str
@@ -101,53 +102,66 @@ class WarehouseResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
-# ── Rack ──────────────────────────────────────────────────────────────────────
-
 class RackSummaryResponse(BaseModel):
-    """Коротка інформація про стелаж у списку."""
+    
 
     rack_id: int
     rack_code: str
     shelves_count: int
     fill_percent: float
-
+    volume_fill_percent: float = 0.0
+    weight_fill_percent: float = 0.0
+    used_volume_m3: float = 0.0
+    total_volume_m3: float = 0.0
+    used_weight_kg: float = 0.0
+    total_max_weight_kg: float = 0.0
+    shelves_used: int = 0
+    overloaded: bool = False
 
 class ShelfInfoResponse(BaseModel):
-    """Інформація про полицю у деталях стелажа."""
+    
 
     shelf_id: int
     shelf_code: str
-    product_name: str | None  # завжди null — товари ще не реалізовані
+    product_name: str | None  # завжди null - товари ще не реалізовані
     occupied: int             # 1 if is_occupied else 0
     capacity: int             # завжди 1
     shelf_status: str
-
+    volume_fill_percent: float = 0.0
+    weight_fill_percent: float = 0.0
+    used_volume_m3: float = 0.0
+    total_volume_m3: float = 0.0
+    used_weight_kg: float = 0.0
+    total_max_weight_kg: float = 0.0
+    items_count: int = 0
+    overloaded: bool = False
 
 class RackDetailsResponse(BaseModel):
-    """Детальна інформація про стелаж разом із полицями."""
+    
 
     rack_id: int
     rack_code: str
     zone_name: str | None     # завжди null
     updated_at: str | None    # None (поле відсутнє в моделі)
     shelves: list[ShelfInfoResponse]
-
-
-# ── Shelf CRUD ────────────────────────────────────────────────────────────────
+    volume_fill_percent: float = 0.0
+    weight_fill_percent: float = 0.0
+    used_volume_m3: float = 0.0
+    total_volume_m3: float = 0.0
+    used_weight_kg: float = 0.0
+    total_max_weight_kg: float = 0.0
 
 from decimal import Decimal as _Decimal  # noqa: E402  (вже імпортовано вгорі)
 from app.core.enums import ShelfStatus, InactiveReason  # noqa: E402
 
-
 class ShelfCreate(BaseModel):
-    """Тіло запиту для створення нової полиці."""
+    
 
     code: str = Field(..., max_length=50, description="Код полиці (унікальний у стелажі)")
-    width: _Decimal = Field(..., gt=0, decimal_places=2)
-    length: _Decimal = Field(..., gt=0, decimal_places=2)
-    height: _Decimal = Field(..., gt=0, decimal_places=2)
-    max_weight: _Decimal = Field(..., gt=0, decimal_places=3)
+    width: _Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+    length: _Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+    height: _Decimal = Field(..., gt=0, max_digits=8, decimal_places=2)
+    max_weight: _Decimal = Field(..., gt=0, max_digits=10, decimal_places=3)
     status: ShelfStatus = ShelfStatus.ACTIVE
     inactive_reason: InactiveReason | None = None
 
@@ -159,20 +173,27 @@ class ShelfCreate(BaseModel):
             raise ValueError("Код полиці не може бути порожнім або складатися лише з пробілів")
         return stripped
 
-
 class ShelfUpdate(BaseModel):
-    """Тіло запиту для часткового оновлення полиці (всі поля необов'язкові)."""
+    
 
-    width: _Decimal | None = Field(default=None, gt=0)
-    length: _Decimal | None = Field(default=None, gt=0)
-    height: _Decimal | None = Field(default=None, gt=0)
-    max_weight: _Decimal | None = Field(default=None, gt=0)
+    width: _Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
+    length: _Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
+    height: _Decimal | None = Field(default=None, gt=0,max_digits=8, decimal_places=2)
+    max_weight: _Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=3)
     status: ShelfStatus | None = None
     inactive_reason: InactiveReason | None = None
 
+    @model_validator(mode="after")
+    def required_fields_not_null(self) -> "ShelfUpdate":
+        # Оновлення бере передані поля (exclude_unset): явний null дійшов би до NOT NULL-колонок.
+        # inactive_reason null стирає причину, решта полів обов'язкові.
+        for field in ("width", "length", "height", "max_weight", "status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"Поле {field} не може бути null")
+        return self
 
 class ShelfResponse(BaseModel):
-    """Відповідь з повними даними полиці."""
+    
 
     shelf_id: int
     shelf_code: str
@@ -186,3 +207,11 @@ class ShelfResponse(BaseModel):
     status: str
     inactive_reason: str | None
     volume_m3: float
+    used_volume_m3: float = 0.0
+    used_weight_kg: float = 0.0
+    volume_fill_percent: float = 0.0
+    weight_fill_percent: float = 0.0
+    free_volume_m3: float = 0.0
+    free_weight_kg: float = 0.0
+    items_count: int = 0
+    overloaded: bool = False

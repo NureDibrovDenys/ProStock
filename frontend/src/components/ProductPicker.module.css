@@ -1,0 +1,86 @@
+.picker {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--color-muted);
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: 13px;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(101, 107, 70, 0.18);
+}
+
+.invalid {
+  border-color: var(--color-danger);
+}
+
+.list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 360px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.option {
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.optionActive {
+  background: #f0f0e6;
+}
+
+.optionTaken {
+  color: var(--color-placeholder);
+  cursor: not-allowed;
+}
+
+.takenNote {
+  margin-left: 8px;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.sku {
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+.note {
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--color-muted);
+}

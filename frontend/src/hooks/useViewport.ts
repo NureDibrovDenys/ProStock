@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Bounds } from '../components/map/geometry';
 
-/** x, y — зсув у пікселях; scale — пікселів на метр. */
+/** x, y - зсув у пікселях; scale - пікселів на метр. */
 export interface Viewport {
   x: number;
   y: number;
@@ -15,14 +15,14 @@ const DRAG_THRESHOLD = 3;
 const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
 /**
- * Панорамування й масштабування SVG-мапи. Координати об'єктів — світові (метри),
+ * Панорамування й масштабування SVG-мапи. Координати об'єктів - світові (метри),
  * viewport переводить їх в екранні пікселі.
  */
 export function useViewport(initial: Viewport = { x: 70, y: 50, scale: 22 }) {
   const [viewport, setViewport] = useState<Viewport>(initial);
   const [size, setSize] = useState({ width: 800, height: 500 });
   const svgRef = useRef<SVGSVGElement | null>(null);
-  // Callback-ref: SVG може з'явитися пізніше (після завантаження даних) — слухачі чіпляються тоді ж
+  // Callback-ref: SVG може з'явитися пізніше (після завантаження даних) - слухачі чіпляються тоді ж
   const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
   const bindSvg = useCallback((el: SVGSVGElement | null) => {
     svgRef.current = el;
@@ -55,7 +55,7 @@ export function useViewport(initial: Viewport = { x: 70, y: 50, scale: 22 }) {
     return [(clientX - (rect?.left ?? 0) - vp.x) / vp.scale, (clientY - (rect?.top ?? 0) - vp.y) / vp.scale];
   }, []);
 
-  /** Масштабування відносно точки (у координатах SVG); за замовчуванням — центр. */
+  /** Масштабування відносно точки (у координатах SVG); за замовчуванням - центр. */
   const zoomBy = useCallback((factor: number, anchor?: { x: number; y: number }) => {
     setViewport((vp) => {
       const scale = clampScale(vp.scale * factor);

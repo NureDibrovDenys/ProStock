@@ -31,12 +31,25 @@ PRODUCT_READ_ROLES: frozenset[RoleName] = ALL_ROLES
 # Account management — root and admin
 USER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES
 
+# Suppliers and recipients directories — admins and  managers
+DIRECTORY_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+  
 # Creating storekeepers of own warehouse — warehouse manager
 # (admins create any accounts via 'users_manage')
 STOREKEEPER_MANAGE_ROLES: frozenset[RoleName] = frozenset({RoleName.WAREHOUSE_MANAGER})
 
 # Editing map of a warehouse — only admin
 WAREHOUSE_MAP_WRITE_ROLES: frozenset[RoleName] = ADMIN_ROLES
+
+# Suppliers and recipients directories — admins and  managers
+DIRECTORY_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+
+# Inbound and outbound orders: creating, editing, posting — admins and managers
+ORDER_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
+
+# Shelves: creating, editing, deleting — admins and managers
+# (mirrors 'require_write' in app/warehouses/router.py)
+SHELF_MANAGE_ROLES: frozenset[RoleName] = ADMIN_ROLES | {RoleName.WAREHOUSE_MANAGER}
 
 def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
     """
@@ -58,6 +71,9 @@ def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
             "users_manage": False,
             "storekeepers_manage": False,
             "warehouse_map_write": False,
+            "directories_manage": False,
+            "orders_manage": False,
+            "shelves_manage": False,
         }
     
     return {
@@ -69,4 +85,7 @@ def permissions_for(role_name: RoleName | str) -> dict[str, bool]:
         "users_manage": role_enum in USER_MANAGE_ROLES,
         "storekeepers_manage": role_enum in STOREKEEPER_MANAGE_ROLES,
         "warehouse_map_write": role_enum in WAREHOUSE_MAP_WRITE_ROLES,
+        "directories_manage": role_enum in DIRECTORY_MANAGE_ROLES,
+        "orders_manage": role_enum in ORDER_MANAGE_ROLES,
+        "shelves_manage": role_enum in SHELF_MANAGE_ROLES,
     }

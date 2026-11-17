@@ -33,7 +33,6 @@ from app.core.validators import (
     validate_rotation_angle,
 )
 
-
 class Warehouse(Base):
     __tablename__ = "warehouse"
     
@@ -709,7 +708,6 @@ class Shelf(Base):
     code: Mapped[str] = mapped_column(
         "shelf_code",
         String(50),
-        unique=True,
         nullable=False
     )
     qr: Mapped[str] = mapped_column(
@@ -785,6 +783,11 @@ class Shelf(Base):
             "shelf_max_weight > 0",
             name="check_shelf_max_weight_min",
         ),
+        UniqueConstraint(
+            "rack_id",
+            "shelf_code",
+            name = "uq_shelf_rack_code"
+        )
     )
     
     @validates("width")
@@ -803,18 +806,22 @@ class Shelf(Base):
     def validate_shelf_max_weight(self, key, value):
         return validate_positive_decimal(key, value)
 
-    def occupy(self):
+    def occupy(self) -> None:
+        
+        if self.status != ShelfStatus.ACTIVE:
+            raise ValueError("Не можна розміщувати товар на неактивній полиці.") 
+        
         self.is_occupied = True
-        self.status = ShelfStatus.OCCUPIED
+        
+    def release(self) -> None:
+        
+        
+        self.is_occupied = False
 
     @property
     def total_volume_m3(self) -> float:
-        """
-        Total shelf volume in cubic meters (m³).
-        Provided that the data is stored in mm.
-        """
-        total_volume_mm: float = float(self.length) * float(self.width) * float(self.height)
-        return total_volume_mm / 1_000_000_000
+        
+        return float(self.length) * float(self.width) * float(self.height)
 
     def __repr__(self) -> str:
         return f"Shelf(id={self.id!r}, code={self.code!r})"

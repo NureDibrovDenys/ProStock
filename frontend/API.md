@@ -220,9 +220,38 @@
 `walls` — вершини контуру з `vertex_order` (простий полігон, площа > 0), `partitions` — перегородки
 `start_x/start_y/end_x/end_y/thickness/height`, далі `racks`, `obstacles`, `zones`, `entry_points`.
 Об'єкти з `*_id` зберігають його, без `*_id` — отримують новий. Числа віддаються числами.
-| GET | `/warehouses/{id}`, `/dashboard`, `/racks` | ще не реалізовано |
 
 Усі ці ендпоінти вимагають авторизації; запис мапи — root / administrator / warehouse_manager.
+
+---
+
+## Стелажі та полиці
+
+| Метод | Шлях | Права |
+|---|---|---|
+| GET | `/warehouses/{id}/racks` | будь-який автентифікований (свої склади; адміні — усі) |
+| GET | `/warehouses/{id}/racks/{rack_code}` | те саме; полиці у скороченому вигляді |
+| GET | `/warehouses/{id}/racks/{rack_code}/shelves` | те саме; повні дані полиць |
+| GET | `/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id}` | те саме |
+| POST | `/warehouses/{id}/racks/{rack_code}/shelves` | root, administrator, warehouse_manager |
+| PATCH | `/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id}` | root, administrator, warehouse_manager |
+| DELETE | `/warehouses/{id}/racks/{rack_code}/shelves/{shelf_id}` | root, administrator, warehouse_manager |
+
+```json
+[ {
+  "shelf_id": 1, "shelf_code": "A-01", "qr": "RR1-A-01", "rack_id": 3,
+  "width": "1.20", "length": "2.40", "height": "1.50", "max_weight": "500.000",
+  "is_occupied": false, "status": "active", "inactive_reason": null, "volume_m3": 4.32
+} ]
+```
+
+- `code` унікальний у стелажі, змінювати його PATCH-ем не можна; `qr` генерується на бекенді як `R{rack_code}-{shelf_code}`;
+- габарити — `decimal(8, 2)` > 0, `max_weight` — `decimal(10, 3)` > 0;
+- `status`: `active` | `occupied` | `inactive`; `occupied` вручну встановити не можна;
+- для `status: "inactive"` обовʼязковий `inactive_reason`
+  (`damaged | maintenance | stocktaking | quality_control | other`);
+  при поверненні у `active` разом зі статусом треба надіслати `inactive_reason: null`;
+- дублікат коду/QR — `409`, видалення зайнятої полиці — `409`, порожнє тіло PATCH — `422`.
 
 ---
 

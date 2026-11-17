@@ -64,10 +64,8 @@ export function WarehousePage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const pressedId = useRef<string | null>(null);
 
-  // Вписати мапу у вікно, коли дані прийшли
   useEffect(() => {
     if (objs.length) vp.fitTo(mapBounds(objs));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [objs]);
 
   const racks = objs.filter((o): o is ShapeObject => o.t === 'rack');
@@ -104,7 +102,7 @@ if (warehouseId === null) {
     <>
       <PageHeader
         title={`Склад ${warehouseName}`}
-        subtitle="Наведіть на стелаж — побачите його заповненість. Клік по стелажу відкриває його полиці."
+        subtitle="Наведіть на стелаж - побачите його заповненість. Клік по стелажу відкриває його полиці."
         actions={
           can('warehouse_map_write') && (
             <Button variant="secondary" to="/warehouse/edit">
@@ -140,6 +138,7 @@ if (warehouseId === null) {
                   hoveredId={hoveredId}
                   showGrid={false}
                   rackCaption={(r) => (fills[r.name] !== undefined ? `${fills[r.name]}%` : null)}
+                  rackFill={fills}
                 />
               </svg>
 
@@ -174,8 +173,8 @@ if (warehouseId === null) {
               {fills[legendRack.name] !== undefined
                 ? `заповнений на ${fills[legendRack.name]}%`
                 : racksQuery.isError
-                  ? '— дані про заповнення недоступні'
-                  : '— немає даних про заповнення'}
+                  ? '- дані про заповнення недоступні'
+                  : '- немає даних про заповнення'}
             </p>
           )}
         </aside>

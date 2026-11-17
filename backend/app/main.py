@@ -13,6 +13,13 @@ from app.routers import map as map_router
 from app.users.router import router as users_router
 from app.warehouses.router import router as warehouses_router
 from app.managers.router import router as managers_router
+from app.counterparties.router import suppliers_router, recipients_router
+from app.orders.router import (
+    router as inbound_orders_router,
+    outbound_router as outbound_orders_router,
+    orders_router as orders_router,
+    stock_router as stock_router,
+)
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
@@ -20,17 +27,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("prostock")
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Готує довідник ролей і стартові акаунти (ідемпотентно)."""
+    
     try:
         async with async_session_maker() as session:
             await bootstrap(session)
-    except Exception:  # noqa: BLE001 — не валимо API, якщо БД тимчасово недоступна
+    except Exception:  # noqa: BLE001 - не валимо API, якщо БД тимчасово недоступна
         logger.exception("Не вдалося виконати bootstrap бази даних")
     yield
-
 
 app = FastAPI(
     title="ProStock API",
@@ -48,10 +53,8 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "X-Total-Count"],
 )
 
-#підключення роутера для роботи з топологією складу
 app.include_router(map_router.router)
 
-#роутери автентифікації, користувачів, товарів
 app.include_router(auth_router.router)
 app.include_router(users_router)
 app.include_router(warehouses_router)
@@ -59,7 +62,12 @@ app.include_router(products_router)
 app.include_router(categories_router)
 
 app.include_router(managers_router)
-
+app.include_router(suppliers_router)
+app.include_router(recipients_router)
+app.include_router(inbound_orders_router)
+app.include_router(outbound_orders_router)
+app.include_router(orders_router)
+app.include_router(stock_router)
 
 @app.get("/")
 def root():
@@ -69,10 +77,9 @@ def root():
         "version": app.version,
     }
 
-
 @app.get("/api/v1/health", tags=["Service"])
 async def health():
-    """Перевірка доступності API та бази даних."""
+    
     from sqlalchemy import text
     from app.core.db import async_session_maker as session_maker
 
