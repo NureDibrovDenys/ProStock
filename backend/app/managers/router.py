@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.enums import RoleName
+from app.core.rbac import STOREKEEPER_MANAGE_ROLES
 
 from app.users import crud
 from app.users.models import User
@@ -26,7 +27,7 @@ from app.users.schemas import (
 from app.utils.security import (
     get_current_admin_user,
     get_current_user,
-
+    require_roles,
 )
 
 router = APIRouter(prefix="/api/v1/managers", tags = ["Managers"])
@@ -56,17 +57,9 @@ router = APIRouter(prefix="/api/v1/managers", tags = ["Managers"])
 )
 async def create_user(
     payload: StorekeeperCreatePayload,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles(*STOREKEEPER_MANAGE_ROLES)),
     session: AsyncSession = Depends(get_async_session),
 ) -> UserListItem:
-    
-    #перевірка на авторизованого користувача
-    if current_user["role"] != RoleName.WAREHOUSE_MANAGER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only warehouse managers can create storekeepers"
-        )
-        
     #перевіремо чи менеджеру призначено склад
     warehouse_id = current_user["warehouse_id"]
     if warehouse_id is None:

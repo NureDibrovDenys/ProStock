@@ -230,6 +230,8 @@ class StorekeeperCreatePayload(BaseModel):
     
     password: str = Field(..., min_length=8, max_length=128)
     
+    model_config = ConfigDict(extra="forbid")
+    
     @field_validator("user_email")
     @classmethod
     def validate_email(cls, value: str) -> str:
@@ -252,6 +254,8 @@ class StorekeeperUpdatePayload(BaseModel):
         serialization_alias="user_email",
     )
     password: str | None = Field(None, min_length=MIN_PASSWORD_LENGTH)
+    
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("first_name", "last_name", mode="before")
     @classmethod
