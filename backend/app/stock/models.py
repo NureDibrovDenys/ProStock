@@ -169,10 +169,10 @@ class StockMovement(Base):
 
 
 class LpnContainer(Base):
-    __tablename__ = "lpn_containter"
+    __tablename__ = "lpn_container"
     
     id: Mapped[int] = mapped_column(
-        "lpn_containter_id",
+        "lpn_container_id",
         BigInteger,
         primary_key=True,
         autoincrement=True,
