@@ -166,3 +166,38 @@ class StockMovement(Base):
             f"StockMovement(id={self.id!r}, product_id={self.product_id!r}, "
             f"quantity={self.quantity!r}, type={self.movement_type!r})"
         )
+
+
+class LpnContainer(Base):
+    __tablename__ = "lpn_container"
+    
+    id: Mapped[int] = mapped_column(
+        "lpn_container_id",
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    
+    qr: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    warehouse_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("warehouse.warehouse_id", ondelete="CASCADE"),
+        nullable=False,
+        index = True,
+    )
+    
+    shelf_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("shelf.shelf_id", ondelete = "SET NULL"),
+        nullable=True,
+        index = True
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        nullable=False,
+        server_default=func.now()
+    )
+    
+    __table_args__ = (UniqueConstraint("qr", name = "unique_lpn_container_qr"),)

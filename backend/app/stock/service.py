@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_DOWN
+from uuid import uuid4
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.core.enums import StockMovementType
 from app.core.units import volume_m3
 from app.products.models import Product
-from app.stock.models import StockItem, StockMovement
+from app.stock.models import LpnContainer, StockItem, StockMovement
 from app.warehouses.models import Rack, Shelf
 
 ZERO = Decimal("0")
@@ -409,3 +410,13 @@ async def delete_stock_for_warehouse(session: AsyncSession, warehouse_id: int) -
         delete(StockItem).where(StockItem.warehouse_id == warehouse_id)
     )
     await session.commit()
+
+
+
+async def create_lpn_container(session: AsyncSession, warehouse_id: int) -> LpnContainer:
+    container = LpnContainer(warehouse_id=warehouse_id, qr = f"LPN-{uuid4()}")
+    
+    session.add(container)
+    await session.flush()
+    
+    return container
