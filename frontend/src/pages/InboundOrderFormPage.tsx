@@ -717,7 +717,15 @@ function CapacityPanel({ capacity, required }: { capacity: Capacity; required: n
     return <p className={styles.muted}>Перевірку ще не виконано. Перевірте вміщуваність перед проведенням.</p>;
   }
 
-  const { fits, required_m3, free_m3, total_m3 } = capacity.result;
+  const {
+    fits,
+    required_m3,
+    free_m3,
+    total_m3,
+    required_weight_kg,
+    free_weight_kg,
+    shortages,
+  } = capacity.result;
   const percent = (value: number) => (total_m3 > 0 ? percentFormat.format((value / total_m3) * 100) : '0');
 
   if (fits) {
@@ -739,8 +747,25 @@ function CapacityPanel({ capacity, required }: { capacity: Capacity; required: n
         <X size={16} aria-hidden />
         <div>
           <p className={styles.noticeTitle}>Не вміщується</p>
+          {shortages.length > 0 ? (
+            <ul className={styles.shortageList}>
+              {shortages.map((shortage, index) => (
+                <li key={`${shortage.product_id}-${index}`}>
+                  {shortage.product_name}: {shortage.reason}.
+                  Не вмістилося: {shortage.unplaced}.
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Недостатньо місця для розміщення поставки.</p>
+          )}
           <p>
-            Причина: об'єм. Потрібно {volumeFormat.format(required_m3)} м³, доступно {volumeFormat.format(free_m3)} м³.
+            Об'єм: потрібно {volumeFormat.format(required_m3)} м³,
+            доступно {volumeFormat.format(free_m3)} м³.
+          </p>
+          <p>
+            Вага: потрібно {weightFormat.format(required_weight_kg)} кг,
+            доступно {weightFormat.format(free_weight_kg)} кг.
           </p>
           <p className={styles.noticeNote}>Зараз вільно {percent(free_m3)}% місткості складу.</p>
         </div>
@@ -748,8 +773,9 @@ function CapacityPanel({ capacity, required }: { capacity: Capacity; required: n
       <div className={cx(styles.notice, styles.noticeWarn)}>
         <AlertTriangle size={15} aria-hidden />
         <p>
-          Дефіцит місця - {percent(required_m3 - free_m3)}% від загальної місткості. Проведення накладної заблоковано,
-          доки не звільниться місце або не зменшиться кількість.
+          Звільніть місце на полицях, збільште доступну
+          вантажопідйомність або зменште кількість товару
+          перед проведенням накладної.
         </p>
       </div>
     </>
