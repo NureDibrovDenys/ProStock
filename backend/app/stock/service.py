@@ -181,6 +181,55 @@ async def _used_capacity(
         used[shelf_id] = (current_volume + volume, current_weight + weight)
     return used
 
+def _get_capacity_shortage_reason(
+    shelves: list[Shelf],
+    used: dict[int, tuple[Decimal, Decimal]],
+    unit_volume: Decimal,
+    unit_weight: Decimal,
+    remaining: Decimal,
+) -> str:
+    if not shelves:
+        return "на складі немає жодної активної полиці"
+
+    total_by_volume = ZERO
+    total_by_weight = ZERO
+
+    for shelf in shelves:
+        used_volume, used_weight = used.get(shelf.id, (ZERO, ZERO))
+
+        free_volume = max(
+            ZERO,
+            volume_m3(shelf.width, shelf.length, shelf.height) - used_volume,
+        )
+        free_weight = max(
+            ZERO,
+            Decimal(str(shelf.max_weight)) - used_weight,
+        )
+
+        if unit_volume > ZERO:
+            total_by_volume += (free_volume / unit_volume).quantize(
+                QUANTITY_STEP, rounding=ROUND_DOWN
+            )
+
+        if unit_weight > ZERO:
+            total_by_weight += (free_weight / unit_weight).quantize(
+                QUANTITY_STEP, rounding=ROUND_DOWN
+            )
+
+    volume_shortage = unit_volume > ZERO and total_by_volume < remaining
+    weight_shortage = unit_weight > ZERO and total_by_weight < remaining
+
+    if volume_shortage and weight_shortage:
+        return "недостатньо вільного об'єму та вантажопідйомності полиць"
+
+    if volume_shortage:
+        return "недостатньо вільного об'єму на полицях"
+
+    if weight_shortage:
+        return "недостатньо вантажопідйомності полиць"
+
+    return "недостатньо місця з одночасним урахуванням об'єму та ваги"
+
 async def place_incoming(
     session: AsyncSession,
     warehouse_id: int,
@@ -274,10 +323,12 @@ async def place_incoming(
             placed += take
 
         if remaining > 0:
-            reason = (
-                "на складі немає жодної активної полиці"
-                if not shelves
-                else "недостатньо вільного місця за об'ємом і вагою"
+            reason = _get_capacity_shortage_reason(
+                shelves,
+                used,
+                unit_volume,
+                unit_weight,
+                remaining,
             )
             shortages.append(
                 CapacityShortage(
