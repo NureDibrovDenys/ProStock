@@ -405,10 +405,10 @@ async def _move_storekeepers_with_manager(
 ) -> None:
     """Storekeepers follow their manager to the new warehouse.
 
-    The cascade is allowed only while the manager is the sole active manager of
-    the warehouse — otherwise we would take someone else's storekeepers away.
-    When a safe move is impossible the reassignment is rejected instead of
-    leaving storekeepers orphaned or detached from the warehouse.
+    Storekeepers belong to a warehouse, not to a particular manager. If another
+    active manager stays on the old warehouse, the storekeepers stay there with
+    them and only this manager moves. The cascade happens only when the manager
+    is the sole active manager, so storekeepers are never left without one.
     """
     old_warehouse_id: int | None = manager.warehouse_id
     if old_warehouse_id is None or old_warehouse_id == new_warehouse_id:
@@ -417,14 +417,12 @@ async def _move_storekeepers_with_manager(
     if await count_storekeepers(session, old_warehouse_id) == 0:
         return
 
+    if await count_active_managers(session, old_warehouse_id, exclude_user_id=manager.id) > 0:
+        return
+
     if new_warehouse_id is None:
         raise ManagerHasStorekeepersError(
-            "The warehouse cannot be detached: it still has storekeepers assigned"
-        )
-
-    if await count_active_managers(session, old_warehouse_id, exclude_user_id=manager.id) > 0:
-        raise ManagerHasStorekeepersError(
-            "Another manager is responsible for this warehouse: move the storekeepers manually"
+            "Не можна зняти менеджера зі складу: на складі є комірники, а іншого менеджера немає"
         )
 
     storekeeper_role: Role | None = await get_role_by_name(session, RoleName.WORKER)

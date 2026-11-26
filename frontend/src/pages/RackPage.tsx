@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Printer, QrCode, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -9,7 +9,10 @@ import { deleteShelf, listShelves } from '../api/warehouse';
 import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { LabelPrinter } from '../components/labels/LabelPrinter';
+import { shelfLabel } from '../components/labels/labelData';
 import { INACTIVE_REASONS, ShelfFormModal } from '../components/ShelfFormModal';
+import { ShelfQrModal } from '../components/ShelfQrModal';
 import { NoWarehouseState } from '../components/NoWarehouseState';
 import { StatCard, StatGrid } from '../components/StatCard';
 import { ErrorState, LoadingState, PageHeader, ProgressBar } from '../components/ui';
@@ -51,6 +54,8 @@ export function RackPage() {
 
   const [modal, setModal] = useState<ShelfModalState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Shelf | null>(null);
+  const [qrShelf, setQrShelf] = useState<Shelf | null>(null);
+  const [printingAll, setPrintingAll] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: (shelf: Shelf) => {
@@ -75,6 +80,8 @@ export function RackPage() {
   const totalVolume = shelves.reduce((sum, shelf) => sum + (shelf.volume_m3 ?? 0), 0);
   const usedVolume = shelves.reduce((sum, shelf) => sum + (shelf.used_volume_m3 ?? 0), 0);
   const fill = totalVolume > 0 ? Math.round((usedVolume / totalVolume) * 100) : 0;
+  const occupied = shelves.filter((shelf) => (shelf.items_count ?? 0) > 0).length;
+  const free = capacity - occupied;
 
   if (warehouseId === null) {
     return <NoWarehouseState />;
@@ -99,20 +106,27 @@ export function RackPage() {
       {query.isSuccess && (
         <>
           <StatGrid>
-            <StatCard label="Заповненість" value={`${fill}%`} caption="від загальної місткості" />
-            <StatCard label="Місткість" value={String(capacity)} caption={plural(capacity, ['палетомісце', 'палетомісця', 'палетомісць'])} />
-            <StatCard label="Використано" value={`${fill}%`} caption="від загального об'єму" />
+            <StatCard label="Заповненість" value={`${fill}%`} caption="від загального об'єму" />
             <StatCard label="Місткість" value={String(capacity)} caption={plural(capacity, ['полиця', 'полиці', 'полиць'])} />
+            <StatCard label="Зайнято" value={String(occupied)} caption={plural(occupied, ['полиця з товаром', 'полиці з товаром', 'полиць з товаром'])} />
+            <StatCard label="Вільно" value={String(free)} caption={plural(free, ['порожня полиця', 'порожні полиці', 'порожніх полиць'])} />
           </StatGrid>
 
           <section className={styles.shelves}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.title}>Полиці</h2>
-              {canManage && (
-                <Button variant="secondary" onClick={() => setModal({ mode: 'create' })}>
-                  <Plus size={16} aria-hidden /> Додати полицю
-                </Button>
-              )}
+              <div className={styles.headerActions}>
+                {shelves.length > 0 && (
+                  <Button variant="secondary" onClick={() => setPrintingAll(true)} disabled={printingAll}>
+                    <Printer size={16} aria-hidden /> Друкувати етикетки
+                  </Button>
+                )}
+                {canManage && (
+                  <Button variant="secondary" onClick={() => setModal({ mode: 'create' })}>
+                    <Plus size={16} aria-hidden /> Додати полицю
+                  </Button>
+                )}
+              </div>
             </div>
 
             {shelves.length === 0 ? (
@@ -134,11 +148,9 @@ export function RackPage() {
                       <th scope="col">Навантаження</th>
                       <th scope="col">Зайнято</th>
                       <th scope="col">Заповненість</th>
-                      {canManage && (
-                        <th scope="col" className={styles.actionsHeader}>
-                          Дії
-                        </th>
-                      )}
+                      <th scope="col" className={styles.actionsHeader}>
+                        Дії
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -171,33 +183,44 @@ export function RackPage() {
                               {formatNumber(Number(shelf.used_weight_kg))} / {formatNumber(Number(shelf.max_weight))} кг
                             </span>
                           </td>
-                          {canManage && (
-                            <td>
-                              <div className={styles.rowActions}>
-                                <button
-                                  type="button"
-                                  className={styles.iconButton}
-                                  onClick={() => setModal({ mode: 'edit', shelf })}
-                                  aria-label={`Редагувати полицю ${shelf.shelf_code}`}
-                                  title="Редагувати"
-                                >
-                                  <Pencil size={16} aria-hidden />
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`${styles.iconButton} ${styles.danger}`}
-                                  onClick={() => {
-                                    deleteMutation.reset();
-                                    setDeleteTarget(shelf);
-                                  }}
-                                  aria-label={`Видалити полицю ${shelf.shelf_code}`}
-                                  title="Видалити"
-                                >
-                                  <Trash2 size={16} aria-hidden />
-                                </button>
-                              </div>
-                            </td>
-                          )}
+                          <td>
+                            <div className={styles.rowActions}>
+                              <button
+                                type="button"
+                                className={styles.iconButton}
+                                onClick={() => setQrShelf(shelf)}
+                                aria-label={`QR полиці ${shelf.shelf_code}`}
+                                title="QR та етикетка"
+                              >
+                                <QrCode size={16} aria-hidden />
+                              </button>
+                              {canManage && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={styles.iconButton}
+                                    onClick={() => setModal({ mode: 'edit', shelf })}
+                                    aria-label={`Редагувати полицю ${shelf.shelf_code}`}
+                                    title="Редагувати"
+                                  >
+                                    <Pencil size={16} aria-hidden />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`${styles.iconButton} ${styles.danger}`}
+                                    onClick={() => {
+                                      deleteMutation.reset();
+                                      setDeleteTarget(shelf);
+                                    }}
+                                    aria-label={`Видалити полицю ${shelf.shelf_code}`}
+                                    title="Видалити"
+                                  >
+                                    <Trash2 size={16} aria-hidden />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -215,6 +238,16 @@ export function RackPage() {
           rackCode={rackCode}
           shelf={modal.mode === 'edit' ? modal.shelf : undefined}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {qrShelf && <ShelfQrModal shelf={qrShelf} rackCode={rackCode} onClose={() => setQrShelf(null)} />}
+
+      {printingAll && (
+        <LabelPrinter
+          labels={shelves.map((shelf) => shelfLabel(shelf, rackCode))}
+          layout="sheet"
+          onDone={() => setPrintingAll(false)}
         />
       )}
 

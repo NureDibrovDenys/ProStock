@@ -210,9 +210,9 @@ async def create_user(
     description=("Available only to admins. "
                  "Assigns a warehouse to a warehouse manager. "
                  "Passing null removes the warehouse assignment. "
-                 "The storekeepers of the warehouse move together with their "
-                 "manager, so a storekeeper always stays at the warehouse of "
-                 "the manager who created them."),
+                 "If the manager is the only active manager of the warehouse, "
+                 "its storekeepers move together with them; if another manager "
+                 "stays on the warehouse, the storekeepers stay there."),
     responses={
         status.HTTP_200_OK: {
             "description": "Warehouse assignment successfully updated"

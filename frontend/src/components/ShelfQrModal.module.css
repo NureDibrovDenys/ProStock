@@ -1,0 +1,20 @@
+.preview {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: var(--color-canvas);
+  border-radius: var(--radius-sm);
+}
+
+/* Збільшуємо етикетку на екрані, щоб QR можна було відсканувати прямо з монітора. */
+.label {
+  zoom: 1.5;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+}
+
+.hint {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-muted);
+}

@@ -1,0 +1,59 @@
+/*
+ * Іменовані сторінки: розміри діють лише на етикетки й не зачіпають
+ * інший друк у застосунку (наприклад, «Друкувати накладну»).
+ */
+@page label-roll {
+  size: 58mm 40mm;
+  margin: 0;
+}
+
+/*
+ * A4 = 210×297 мм. Робоча зона 194×285 мм:
+ * 3 × 58 мм + 2 проміжки по 6 мм = 186 мм завширшки, 7 × 40 мм = 280 мм заввишки.
+ */
+@page label-sheet {
+  size: A4;
+  margin: 6mm 8mm;
+}
+
+.root {
+  display: none;
+}
+
+.rollPage,
+.sheetPage {
+  break-after: page;
+}
+
+.rollPage:last-child,
+.sheetPage:last-child {
+  break-after: auto;
+}
+
+.rollPage {
+  page: label-roll;
+}
+
+.sheetPage {
+  page: label-sheet;
+  display: grid;
+  grid-template-columns: repeat(3, 58mm);
+  grid-auto-rows: 40mm;
+  column-gap: 6mm;
+  justify-content: center;
+}
+
+/* Пунктирна лінія різання; outline не змінює розмір етикетки. */
+.cutLabel {
+  outline: 0.2mm dashed #9a9a9a;
+}
+
+@media print {
+  :global(body > :not(.print-sheet)) {
+    display: none !important;
+  }
+
+  .root {
+    display: block;
+  }
+}

@@ -18,6 +18,12 @@
   margin-bottom: 12px;
 }
 
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .title {
   font-size: 18px;
   font-weight: 600;
