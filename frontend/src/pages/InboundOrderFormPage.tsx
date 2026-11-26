@@ -82,6 +82,7 @@ function lineTotals(line: Line): { volume: number; weight: number } | null {
 const volumeFormat = new Intl.NumberFormat('uk-UA', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 const weightFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 });
 const percentFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 });
+const quantityFormat = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 });
 
 function validateLines(lines: Line[]): Pick<Errors, 'items' | 'lines'> {
   const result: Pick<Errors, 'items' | 'lines'> = { lines: {} };
@@ -752,7 +753,7 @@ function CapacityPanel({ capacity, required }: { capacity: Capacity; required: n
               {shortages.map((shortage, index) => (
                 <li key={`${shortage.product_id}-${index}`}>
                   {shortage.product_name}: {shortage.reason}.
-                  Не вмістилося: {shortage.unplaced}.
+                  Не вмістилося: {quantityFormat.format(Number(shortage.unplaced))}.
                 </li>
               ))}
             </ul>
