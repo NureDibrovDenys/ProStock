@@ -129,7 +129,7 @@ class WarehouseTask(Base):
     )
     created_by_user: Mapped["User"] = relationship(
         "User",
-        foreign_key=[created_by_user_id],
+        foreign_keys=[created_by_user_id],
         lazy="selectin",
     )
     assignees: Mapped[list["WarehouseTaskAssignee"]] = relationship(
@@ -222,7 +222,7 @@ class WarehouseTaskAssignee(Base):
     )
     user: Mapped["User"] = relationship(
         "User",
-        foreign_key=[user_id],
+        foreign_keys=[user_id],
         lazy="selectin",
     )
     
