@@ -38,6 +38,10 @@ export function MapLayers({
   const sw = (n: number) => n / k;
   const room = objs.find((o) => o.t === 'room');
   const shapes = objs.filter(isShape);
+  // Зони малюємо першими, щоб вони лежали під стелажами й перешкодами
+  // і не перехоплювали клік/наведення по об'єктах усередині зони.
+  const isZone = (o: ShapeObject) => o.t === 'zin' || o.t === 'zout' || o.t === 'zstore';
+  const bodies = [...shapes.filter(isZone), ...shapes.filter((o) => o.t !== 'entry' && !isZone(o))];
   const partitions = objs.filter(isPartition);
   const view = { x: -tx / k, y: -ty / k, width: size.width / k, height: size.height / k };
 
@@ -87,20 +91,18 @@ export function MapLayers({
           <Partition key={p.id} p={p} k={k} selected={isSelected(p.id)} conflict={conflicts?.has(p.id) ?? false} />
         ))}
 
-        {shapes
-          .filter((o) => o.t !== 'entry')
-          .map((o) => (
-            <Shape
-              key={o.id}
-              o={o}
-              k={k}
-              selected={isSelected(o.id)}
-              hovered={hoveredId === o.id}
-              conflict={conflicts?.has(o.id) ?? false}
-              caption={o.t === 'rack' ? rackCaption?.(o) : undefined}
-              fill={o.t === 'rack' ? rackFill?.[o.name] : undefined}
-            />
-          ))}
+        {bodies.map((o) => (
+          <Shape
+            key={o.id}
+            o={o}
+            k={k}
+            selected={isSelected(o.id)}
+            hovered={hoveredId === o.id}
+            conflict={conflicts?.has(o.id) ?? false}
+            caption={o.t === 'rack' ? rackCaption?.(o) : undefined}
+            fill={o.t === 'rack' ? rackFill?.[o.name] : undefined}
+          />
+        ))}
         {shapes
           .filter((o) => o.t === 'entry')
           .map((o) => (
