@@ -386,6 +386,25 @@ export interface InboundOrder {
   items: InboundOrderItem[];
 }
 
+/**
+ * LPN - номер фізичної тари з товаром (коробки), на яку клеять етикетку з QR.
+ * Відповідь GET /inbound-orders/{id}/lpn-containers (формат погоджено з бекендом, ендпоінт у роботі).
+ */
+export interface LpnContainer {
+  lpn_container_id: number;
+  /** Код LPN, він же вміст QR, наприклад "LPN-0000123". */
+  code: string;
+  inbound_order_item_id: number;
+  product_name: string;
+  sku_code: string;
+  package_type: string;
+  /** Decimal приходить рядком, наприклад "30.000". */
+  quantity: string;
+  /** null - тару ще не розміщено на полиці. */
+  shelf_id: number | null;
+  shelf_code: string | null;
+}
+
 export interface InboundOrderItemPayload {
   product_id: number;
   quantity: number;

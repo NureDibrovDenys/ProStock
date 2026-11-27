@@ -27,6 +27,7 @@ import {
   type Product,
 } from '../api/types';
 import { Button } from '../components/Button';
+import { LpnLabelsCard } from '../components/LpnLabelsCard';
 import { ProductPicker } from '../components/ProductPicker';
 import { ErrorState, LoadingState } from '../components/ui';
 import { useCurrentWarehouse } from '../hooks/useCurrentWarehouse';
@@ -643,11 +644,17 @@ function InboundOrderForm({ order, products }: { order: InboundOrder | null; pro
           </section>
         </div>
 
-        {}
-        <aside className={cx(styles.card, styles.aside)}>
-          <h2 className={styles.cardTitle}>Перевірка вміщуваності</h2>
-          <CapacityPanel capacity={capacity} required={totals.volume} />
-        </aside>
+        {/* Липка колонка лише для чернетки: у проведеній під нею довгий список LPN. */}
+        <div className={cx(styles.column, !readOnly && styles.aside)}>
+          <aside className={styles.card}>
+            <h2 className={styles.cardTitle}>Перевірка вміщуваності</h2>
+            <CapacityPanel capacity={capacity} required={totals.volume} />
+          </aside>
+          {/* LPN з'являються при проведенні, тож у чернетці блоку немає. */}
+          {order && readOnly && (
+            <LpnLabelsCard orderId={order.inbound_order_id} orderNumber={inboundNumber(order.inbound_order_id)} />
+          )}
+        </div>
       </div>
 
       {}

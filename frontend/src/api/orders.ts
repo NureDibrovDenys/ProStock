@@ -4,6 +4,7 @@ import type {
   InboundOrder,
   InboundOrderItemPayload,
   InboundOrderPayload,
+  LpnContainer,
   OrderListResponse,
   OrderStatus,
   OrderType,
@@ -31,7 +32,10 @@ export const updateInboundOrder = (orderId: number, payload: Partial<InboundOrde
 export const postInboundOrder = (orderId: number) =>
   request<PostOrderResult>(`${INBOUND}/${orderId}/post`, { method: 'POST' });
 
-export const checkInboundCapacity = (warehouseId: number, items: InboundOrderItemPayload[]) =>
+export const getInboundLpnContainers = (orderId: number) =>
+  request<LpnContainer[]>(`${INBOUND}/${orderId}/lpn-containers`);
+
+export const checkInboundCapacity =(warehouseId: number, items: InboundOrderItemPayload[]) =>
   request<CapacityCheck>(`${INBOUND}/capacity-check`, {
     method: 'POST',
     query: { warehouse_id: warehouseId },

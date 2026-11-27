@@ -1,4 +1,5 @@
-import type { Shelf } from '../../api/types';
+import type { LpnContainer, Shelf } from '../../api/types';
+import { formatNumber } from '../../lib/format';
 
 /**
  * Дані однієї етикетки. `qr` кодується в QR-код і дублюється текстом під ним,
@@ -22,23 +23,13 @@ export function shelfLabel(shelf: Pick<Shelf, 'qr' | 'shelf_code'>, rackCode: st
 }
 
 /**
- * Джерело для етикетки LPN. Бекенд поки не віддає LPN накладної (немає зв'язку
- * lpn_container → inbound_order), тож тип описує, що потрібно від майбутнього
- * ендпоінта GET /orders/inbound/{id}/lpn.
+ * Етикетка коробки. Заголовок - назва товару: код LPN і так надруковано під QR,
+ * а комірнику на полиці важливіше одразу бачити, що в коробці.
  */
-export interface LpnLabelSource {
-  /** Код LPN, він же вміст QR. */
-  code: string;
-  productName: string;
-  skuCode: string;
-  /** Кількість з одиницею, наприклад «40 уп.». */
-  quantity: string;
-  orderNumber?: string;
-}
+export function lpnLabel(lpn: LpnContainer, orderNumber: string): LabelData {
+  const lines = [lpn.sku_code, `К-сть: ${formatNumber(Number(lpn.quantity))}`];
+  if (lpn.shelf_code) lines.push(`Полиця ${lpn.shelf_code}`);
+  lines.push(orderNumber);
 
-export function lpnLabel(lpn: LpnLabelSource): LabelData {
-  const lines = [`${lpn.skuCode} · ${lpn.productName}`, lpn.quantity];
-  if (lpn.orderNumber) lines.push(lpn.orderNumber);
-
-  return { qr: lpn.code, kind: 'LPN', title: lpn.code, lines };
+  return { qr: lpn.code, kind: 'LPN', title: lpn.product_name, lines };
 }

@@ -53,7 +53,12 @@
   text-transform: uppercase;
 }
 
+/* Довга назва товару не повинна витіснити решту рядків: не більше двох рядків. */
 .title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 11pt;
   font-weight: 700;
   overflow-wrap: anywhere;
