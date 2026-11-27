@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from decimal import Decimal
 from sqlalchemy import (
     BigInteger,
@@ -10,7 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     CheckConstraint,
-    text
+    text,
 )
 from sqlalchemy.orm import (
     Mapped,
