@@ -290,6 +290,16 @@ class WarehouseTaskStep(Base):
         nullable=True,
         index=True,
     )
+    completed_by_user_id: Mapped[int | None] = mapped_column(
+        "completed_by_user_id",
+        BigInteger,
+        ForeignKey(
+            "user.user_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
     planned_quantity: Mapped[Decimal] = mapped_column(
         "planned_quantity",
         Numeric(precision=10, scale=2),
@@ -323,6 +333,11 @@ class WarehouseTaskStep(Base):
     )
     product: Mapped["Product"] = relationship(
         "Product",
+        lazy="selectin",
+    )
+    completed_by_user: Mapped["User | None"] = relationship(
+        "User",
+        foreign_keys=[completed_by_user_id],
         lazy="selectin",
     )
     
