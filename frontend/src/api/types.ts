@@ -497,6 +497,12 @@ export interface CapacityCheck {
   free_m3: number;
   /** Загальна місткість полиць складу, м³. */
   total_m3: number;
+  /** Вага партії, кг. */
+  required_weight_kg: number;
+  /** Доступна вантажопідйомність полиць, кг. */
+  free_weight_kg: number;
+  /** Перелік товарів, які не вдалося розмістити. */
+  shortages: CapacityShortage[];
 }
 
 // ── Авторизація ───────────────────────────────────────────────────────────

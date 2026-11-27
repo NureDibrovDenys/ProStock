@@ -37,7 +37,6 @@ from app.orders.schemas import (
 from app.products.models import Product
 from app.stock import service as stock_service
 from app.stock.models import StockItem
-from app.warehouses.services import fill_service
 
 router: APIRouter = APIRouter(
     prefix="/api/v1/inbound-orders",
@@ -389,7 +388,24 @@ async def check_inbound_capacity(
             )
         parsed.append((product_id, quantity, package_type))
 
-    capacity = await fill_service.get_warehouse_capacity(session, warehouse_id)
+    shelves = await stock_service._active_shelves(session, warehouse_id)
+    used = await stock_service._used_capacity(session, warehouse_id)
+
+    total_volume = Decimal("0")
+    total_weight = Decimal("0")
+    used_volume = Decimal("0")
+    used_weight = Decimal("0")
+
+    for shelf in shelves:
+        total_volume += volume_m3(shelf.width, shelf.length, shelf.height)
+        total_weight += Decimal(str(shelf.max_weight))
+
+        v, w = used.get(shelf.id, (Decimal("0"), Decimal("0")))
+        used_volume += v
+        used_weight += w
+
+    free_volume = max(Decimal("0"), total_volume - used_volume)
+    free_weight = max(Decimal("0"), total_weight - used_weight)
     products = await stock_service.get_products(
         session, [item[0] for item in parsed]
     )
@@ -410,14 +426,11 @@ async def check_inbound_capacity(
     )
     await session.rollback()
 
-    free_volume = Decimal(str(capacity["free_volume_m3"]))
-    free_weight = Decimal(str(capacity["free_weight_kg"]))
-
     return CapacityCheckResponse(
         fits=not shortages,
         required_m3=round(float(required_volume), 4),
         free_m3=round(float(free_volume), 4),
-        total_m3=round(float(capacity["total_volume_m3"]), 4),
+        total_m3=round(float(total_volume), 4),
         required_weight_kg=round(float(required_weight), 3),
         free_weight_kg=round(float(free_weight), 3),
         shortages=[
