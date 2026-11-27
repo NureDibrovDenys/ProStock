@@ -76,3 +76,19 @@ class OrderType(str, Enum):
     
     INBOUND = "inbound"
     OUTBOUND = "outbound"
+
+class TaskType(str, Enum):
+    PUTAWAY = "putaway"  # розміщення товару з прихідної накладної
+    PICKING = "picking"  # відбір товару (для вихідних накладних)
+
+class TaskStatus(str, Enum):
+    NEW = "new"  # створено, в черзі
+    ASSIGNED = "assigned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
+
+class TaskStepStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
