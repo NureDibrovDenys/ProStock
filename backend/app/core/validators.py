@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Annotated
+from pydantic import AfterValidator, BeforeValidator
 
 # Allowed domains
 PUBLIC_DOMAINS: set[str] = {
@@ -174,3 +175,36 @@ def trim_names(value: Any) -> Any:
         if not value:
             raise ValueError("Name cannot be empty or contain only spaces")
     return value
+
+
+def _strip_to_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    
+    cleaned: str = value.strip()
+    return cleaned or None
+
+
+def _validate_unique_positive_ids(value: list[int] | None) -> list[int] | None:
+    if not value:
+        return None
+    
+    has_non_positive: bool = any(user_id <= 0 for user_id in value)
+    if has_non_positive:
+        raise ValueError("All IDs must be positive")
+    
+    has_duplicates: bool = len(value) != len(set(value))
+    if has_duplicates:
+        raise ValueError("Duplicate IDs are not allowed in the list")
+    
+    return value
+
+
+StrippedStr: type[str] = Annotated[
+    str,
+    BeforeValidator(_strip_to_none)
+]
+UniquePositiveIds: type[list[str]] = Annotated[
+    list[str],
+    AfterValidator(_validate_unique_positive_ids)
+]
