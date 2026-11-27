@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Viewport } from '../../hooks/useViewport';
+import { layoutLabels } from './labels';
 import { isPartition, isShape, type MapObject, type PartitionObject, type ShapeObject } from './model';
 
 type MapLayersProps = {
@@ -42,6 +43,9 @@ export function MapLayers({
   // і не перехоплювали клік/наведення по об'єктах усередині зони.
   const isZone = (o: ShapeObject) => o.t === 'zin' || o.t === 'zout' || o.t === 'zstore';
   const bodies = [...shapes.filter(isZone), ...shapes.filter((o) => o.t !== 'entry' && !isZone(o))];
+  const labels = layoutLabels(shapes, 12 / k, (o) =>
+    o.t === 'rack' ? `${o.name} · ${rackCaption?.(o) ?? `${Math.max(1, o.shelves ?? 1)} пол.`}` : o.name,
+  );
   const partitions = objs.filter(isPartition);
   const view = { x: -tx / k, y: -ty / k, width: size.width / k, height: size.height / k };
 
@@ -99,7 +103,6 @@ export function MapLayers({
             selected={isSelected(o.id)}
             hovered={hoveredId === o.id}
             conflict={conflicts?.has(o.id) ?? false}
-            caption={o.t === 'rack' ? rackCaption?.(o) : undefined}
             fill={o.t === 'rack' ? rackFill?.[o.name] : undefined}
           />
         ))}
@@ -108,6 +111,26 @@ export function MapLayers({
           .map((o) => (
             <Entry key={o.id} o={o} k={k} selected={isSelected(o.id)} />
           ))}
+
+        <g pointerEvents="none">
+          {labels.map((l) => (
+            <text
+              key={l.id}
+              x={l.x}
+              y={l.y}
+              fontSize={12 / k}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="var(--map-ink)"
+              stroke="var(--map-room)"
+              strokeWidth={3 / k}
+              strokeLinejoin="round"
+              paintOrder="stroke"
+            >
+              {l.text}
+            </text>
+          ))}
+        </g>
 
         {children}
       </g>
@@ -121,7 +144,6 @@ function Shape({
   selected,
   hovered,
   conflict,
-  caption,
   fill,
 }: {
   o: ShapeObject;
@@ -129,17 +151,13 @@ function Shape({
   selected: boolean;
   hovered: boolean;
   conflict: boolean;
-  caption?: string | null;
   fill?: number;
 }) {
   const sw = (n: number) => n / k;
-  const fs = 12 / k;
   let body: ReactNode;
-  let label = o.name;
 
   if (o.t === 'rack') {
     const shelves = Math.max(1, o.shelves ?? 1);
-    label = `${o.name} · ${caption ?? `${shelves} пол.`}`;
     const fillPercent = Math.min(100, Math.max(0, fill ?? 0));
     const fillTone =
       fillPercent >= 80 ? 'var(--map-bad)' : fillPercent >= 50 ? 'var(--map-acc)' : 'var(--map-pri)';
@@ -215,40 +233,20 @@ function Shape({
     );
   }
 
-  const rad = (o.a * Math.PI) / 180;
-  const lx = o.t === 'rack' ? o.x + Math.sin(rad) * (o.h / 2 + fs) : o.x;
-  const ly = o.t === 'rack' ? o.y - Math.cos(rad) * (o.h / 2 + fs) : o.y;
-
   return (
-    <g>
-      <g data-id={o.id} transform={`translate(${o.x} ${o.y}) rotate(${o.a})`}>
-        {body}
-        {selected && (
-          <rect
-            x={-o.w / 2 - 0.1}
-            y={-o.h / 2 - 0.1}
-            width={o.w + 0.2}
-            height={o.h + 0.2}
-            fill="none"
-            stroke="var(--map-acc)"
-            strokeWidth={sw(2.5)}
-            strokeDasharray={`${sw(6)} ${sw(3)}`}
-          />
-        )}
-      </g>
-      {}
-      {o.t !== 'obst' && (
-        <text
-          x={lx}
-          y={ly}
-          fontSize={fs}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="var(--map-ink)"
-          pointerEvents="none"
-        >
-          {label}
-        </text>
+    <g data-id={o.id} transform={`translate(${o.x} ${o.y}) rotate(${o.a})`}>
+      {body}
+      {selected && (
+        <rect
+          x={-o.w / 2 - 0.1}
+          y={-o.h / 2 - 0.1}
+          width={o.w + 0.2}
+          height={o.h + 0.2}
+          fill="none"
+          stroke="var(--map-acc)"
+          strokeWidth={sw(2.5)}
+          strokeDasharray={`${sw(6)} ${sw(3)}`}
+        />
       )}
     </g>
   );
@@ -280,9 +278,6 @@ function Entry({ o, k, selected }: { o: ShapeObject; k: number; selected: boolea
       {selected && (
         <circle r=".95" fill="none" stroke="var(--map-acc)" strokeWidth={sw(2)} strokeDasharray={`${sw(5)} ${sw(3)}`} />
       )}
-      <text y="1.5" fontSize={12 / k} textAnchor="middle" fill="var(--map-ink)" pointerEvents="none">
-        {o.name}
-      </text>
     </g>
   );
 }
