@@ -215,3 +215,9 @@ class ShelfResponse(BaseModel):
     free_weight_kg: float = 0.0
     items_count: int = 0
     overloaded: bool = False
+
+
+class LpnContainerResponse(BaseModel):
+    lpn_container_id: int
+    warehouse_id: int
+    qr: str

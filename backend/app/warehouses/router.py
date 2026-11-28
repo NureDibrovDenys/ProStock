@@ -1,5 +1,6 @@
 
 from __future__ import annotations
+from os import stat
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +23,10 @@ from app.warehouses.schemas import (
     WarehouseCreate,
     WarehouseResponse,
     WarehouseUpdate,
+    LpnContainerResponse
+    
 )
+from app.stock.service import create_lpn_container
 
 router = APIRouter(prefix="/api/v1/warehouses", tags=["Warehouses"])
 
@@ -327,6 +331,35 @@ async def list_shelves(
 
     return [_shelf_to_response(shelf, shelf_fills.get(shelf.id)) for shelf in shelves]
 
+@router.post(
+    "/{warehouse_id}/lpn_container",
+    response_model=LpnContainerResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Зареєструвати LPN-контейнер на складі"
+)
+async def register_lpn_container(
+    warehouse_id: int,
+    current_user: dict = Depends(require_write),
+    session: AsyncSession = Depends(get_async_session),
+) -> LpnContainerResponse:
+    _check_warehouse_access(current_user, warehouse_id)
+
+    warehouse = await crud.get_warehouse(session, warehouse_id)
+    if warehouse is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Склад не знайдено",
+        )
+
+    container = await create_lpn_container(session, warehouse_id=warehouse_id)
+    await session.commit()
+
+    return LpnContainerResponse(
+        lpn_container_id=container.id,
+        warehouse_id=container.warehouse_id,
+        qr=container.qr,
+    )
+
 @router.get(
     "/{warehouse_id}/racks/{rack_code}/shelves/{shelf_id}",
     response_model=ShelfResponse,
@@ -465,3 +498,5 @@ async def delete_shelf(
         status_code=status.HTTP_409_CONFLICT,
         detail=str(exc),
     ) from exc
+
+

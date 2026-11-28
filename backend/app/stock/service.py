@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_DOWN
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +14,8 @@ from app.core.units import volume_m3
 from app.products.models import Product
 from app.stock.models import LpnContainer, StockItem, StockMovement
 from app.warehouses.models import Rack, Shelf
+
+from collections.abc import Iterator
 
 ZERO = Decimal("0")
 QUANTITY_STEP = Decimal("0.01")
@@ -413,10 +415,43 @@ async def delete_stock_for_warehouse(session: AsyncSession, warehouse_id: int) -
 
 
 
-async def create_lpn_container(session: AsyncSession, warehouse_id: int) -> LpnContainer:
-    container = LpnContainer(warehouse_id=warehouse_id, qr = f"LPN-{uuid4()}")
-    
+async def create_lpn_container(
+    session: AsyncSession,
+    warehouse_id: int,
+) -> LpnContainer:
+    result = await session.execute(
+        text(
+            "SELECT nextval(CAST(pg_get_serial_sequence("
+            "'public.lpn_container', 'lpn_container_id'"
+            ") AS regclass))"
+        )
+    )
+    container_id = result.scalar_one()
+
+    container = LpnContainer(
+        id=container_id,
+        warehouse_id=warehouse_id,
+        qr=f"LPN-{container_id:07d}",
+    )
     session.add(container)
     await session.flush()
-    
+
     return container
+
+
+def split_into_packages(
+    quantity: Decimal,
+    units_per_package: int | None,
+) -> Iterator[Decimal]:
+    if units_per_package is not None and units_per_package <= 0:
+        raise ValueError("Кількість одиниць в упаковці має бути додатною")
+
+    package_capacity = (
+        quantity if units_per_package is None else Decimal(units_per_package)
+    )
+
+    remaining = quantity
+    while remaining > 0:
+        package_quantity = min(remaining, package_capacity)
+        yield package_quantity
+        remaining -= package_quantity

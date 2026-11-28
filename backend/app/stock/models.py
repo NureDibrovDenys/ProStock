@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.core.enums import StockMovementType
+
 
 class StockItem(Base):
     
@@ -178,6 +180,19 @@ class LpnContainer(Base):
         autoincrement=True,
     )
     
+    inbound_order_item_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("inbound_order_item.inbound_order_item_id",
+                   name="lpn_container_inbound_order_item_id_fkey",),
+        nullable=True,
+        index=True
+    )
+    
+    quantity: Mapped[Decimal | None] = mapped_column(
+        Numeric(10,2),
+        nullable=True
+    )
+    
     qr: Mapped[str] = mapped_column(String(255), nullable=False)
     
     warehouse_id: Mapped[int] = mapped_column(
@@ -199,5 +214,6 @@ class LpnContainer(Base):
         nullable=False,
         server_default=func.now()
     )
+    
     
     __table_args__ = (UniqueConstraint("qr", name = "unique_lpn_container_qr"),)

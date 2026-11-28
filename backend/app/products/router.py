@@ -48,6 +48,7 @@ def _product_read(product) -> ProductRead:
         height=product.height,
         weight=product.weight,
         min_stock_level=product.min_stock_level,
+        units_per_package=product.units_per_package,
     )
 
 

@@ -9,7 +9,8 @@ from sqlalchemy import (
     Text,
     CheckConstraint,
     func,
-    DateTime
+    DateTime,
+    Integer
 )
 from sqlalchemy.orm import (
     Mapped,
@@ -108,12 +109,21 @@ class Product(Base):
         nullable=True
     )
     
+    units_per_package: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    
     category: Mapped["Category"] = relationship(back_populates="products")
     
     __table_args__ = (
         CheckConstraint(
             "product_length > 0",
             name="check_product_length_min",
+        ),
+        CheckConstraint(
+        "units_per_package > 0",
+        name="check_product_units_per_package_positive",
         ),
         CheckConstraint(
             "product_width > 0",

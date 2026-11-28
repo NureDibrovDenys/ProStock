@@ -66,6 +66,13 @@ class ProductBase(BaseModel):
     min_stock_level: Decimal | None = Field(
         None, ge=0, max_digits=8, decimal_places=2, description="Мінімальний залишок"
     )
+    units_per_package: int | None = Field(
+    default=None,
+    strict=True,
+    gt=0,
+    le=2_147_483_647,
+    description="Кількість одиниць товару в одному коробі",
+    )   
 
     @field_validator("sku_code", "name")
     @classmethod
@@ -107,6 +114,13 @@ class ProductUpdate(BaseModel):
     height: Decimal | None = Field(None, gt=0, max_digits=8, decimal_places=2)
     weight: Decimal | None = Field(None, gt=0, max_digits=10, decimal_places=3)
     min_stock_level: Decimal | None = Field(None, ge=0, max_digits=8, decimal_places=2)
+    units_per_package: int | None = Field(
+    default=None,
+    strict=True,
+    gt=0,
+    le=2_147_483_647,
+    description="Кількість одиниць товару в одному коробі",
+    )
 
     @field_validator("sku_code", "name")
     @classmethod
@@ -146,6 +160,7 @@ class ProductRead(BaseModel):
     height: Decimal
     weight: Decimal
     min_stock_level: Decimal | None = None
+    units_per_package: int | None = None
 
 
 class ProductListResponse(BaseModel):

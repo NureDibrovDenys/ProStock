@@ -188,6 +188,7 @@ async def create_product(session: AsyncSession, payload: ProductCreate) -> Produ
         height=payload.height,
         weight=payload.weight,
         min_stock_level=payload.min_stock_level,
+        units_per_package=payload.units_per_package
     )
     session.add(product)
     await session.commit()
@@ -214,7 +215,7 @@ async def update_product(
             raise CategoryNotFoundError(str(new_category_id))
         product.category_id = new_category_id
 
-    for field in ("name", "unit_of_measure", "width", "length", "height", "weight", "min_stock_level"):
+    for field in ("name", "unit_of_measure", "width", "length", "height", "weight", "min_stock_level", "units_per_package"):
         if field in data:
             setattr(product, field, data[field])
 
