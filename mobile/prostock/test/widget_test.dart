@@ -1,30 +1,59 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:prostock/main.dart';
+import 'package:prostock/core/api_client.dart';
+import 'package:prostock/features/auth/auth_controller.dart';
+import 'package:prostock/features/auth/auth_repository.dart';
+import 'package:prostock/features/auth/login_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  late AuthController auth;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() {
+    final api = ApiClient(cookieJar: CookieJar());
+    auth = AuthController(AuthRepository(api));
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  Future<void> pumpLogin(WidgetTester tester) =>
+      tester.pumpWidget(MaterialApp(home: LoginScreen(auth: auth)));
+
+  testWidgets('екран входу показує поля і кнопку', (tester) async {
+    await pumpLogin(tester);
+
+    expect(find.text('Вхід до системи'), findsOneWidget);
+    expect(find.text('Пошта'), findsOneWidget);
+    expect(find.text('Пароль'), findsOneWidget);
+    expect(find.text('Увійти'), findsOneWidget);
+  });
+
+  testWidgets('порожня форма не відправляється', (tester) async {
+    await pumpLogin(tester);
+
+    await tester.tap(find.text('Увійти'));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Введіть пошту'), findsOneWidget);
+    expect(find.text('Введіть пароль'), findsOneWidget);
+  });
+
+  testWidgets('перевіряється формат пошти', (tester) async {
+    await pumpLogin(tester);
+
+    await tester.enterText(find.byType(TextFormField).first, 'not-an-email');
+    await tester.enterText(find.byType(TextFormField).last, 'secret');
+    await tester.tap(find.text('Увійти'));
+    await tester.pump();
+
+    expect(find.text('Невірний формат пошти'), findsOneWidget);
+  });
+
+  testWidgets('кнопка показує або ховає пароль', (tester) async {
+    await pumpLogin(tester);
+
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+    expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
   });
 }
