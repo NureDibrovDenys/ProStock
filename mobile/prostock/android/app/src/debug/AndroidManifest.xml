@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Під час розробки бекенд працює по http (http://10.0.2.2:8000).
+         У релізній збірці дозволено лише https. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

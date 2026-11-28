@@ -1,5 +1,5 @@
 name: prostock
-description: "A new Flutter project."
+description: "ProStock — мобільний застосунок комірника."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -20,6 +20,9 @@ version: 1.0.0+1
 
 environment:
   sdk: ^3.13.7
+  # Уся команда працює на Flutter 3.50.x (див. README). На старішій версії
+  # `flutter pub get` одразу підкаже, що треба виконати `flutter upgrade`.
+  flutter: ">=3.50.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -34,6 +37,10 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  dio: ^5.11.1
+  dio_cookie_manager: ^3.5.0
+  cookie_jar: ^4.0.9
+  flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
   flutter_test:

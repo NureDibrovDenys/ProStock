@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Доступ до бекенду ProStock -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="prostock"
+        android:label="ProStock"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
