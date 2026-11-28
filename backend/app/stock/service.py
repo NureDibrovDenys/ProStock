@@ -182,6 +182,13 @@ async def _used_capacity(
         used[shelf_id] = (current_volume + volume, current_weight + weight)
     return used
 
+def _fits_dimensions(product: Product, shelf: Shelf) -> bool:
+    return (
+        product.width <= shelf.width
+        and product.length <= shelf.length
+        and product.height <= shelf.height
+    )
+
 def _get_capacity_shortage_reason(
     shelves: list[Shelf],
     used: dict[int, tuple[Decimal, Decimal]],
@@ -251,7 +258,20 @@ async def place_incoming(
 
     shortages: list[CapacityShortage] = []
 
-    for product_id, quantity, package_type in items:
+    ordered_items = sorted(
+        (item for item in items if item[0] in products),
+        key=lambda item: (
+            -volume_m3(
+                products[item[0]].width,
+                products[item[0]].length,
+                products[item[0]].height,
+            ),
+            -Decimal(str(products[item[0]].weight)),
+            item[0],
+        ),
+    )
+
+    for product_id, quantity, package_type in ordered_items:
         product = products.get(product_id)
         if product is None:
             continue
@@ -263,12 +283,16 @@ async def place_incoming(
         if unit_volume <= 0 or unit_weight <= 0:
             unit_volume = ZERO
 
+        suitable_shelves = [
+            shelf for shelf in shelves
+            if _fits_dimensions(product, shelf)
+        ]
+
         ordered_shelves = sorted(
-            shelves,
+            suitable_shelves,
             key=lambda shelf: (
-                0
-                if (shelf.id, product_id, package_type) in existing
-                else 1,
+                volume_m3(shelf.width, shelf.length, shelf.height)
+                - used.get(shelf.id, (ZERO, ZERO))[0],
                 shelf.id,
             ),
         )
@@ -324,13 +348,16 @@ async def place_incoming(
             placed += take
 
         if remaining > 0:
-            reason = _get_capacity_shortage_reason(
-                shelves,
-                used,
-                unit_volume,
-                unit_weight,
-                remaining,
-            )
+            if shelves and not suitable_shelves:
+                reason = "габарити товару перевищують габарити доступних полиць"
+            else:
+                reason = _get_capacity_shortage_reason(
+                    suitable_shelves,
+                    used,
+                    unit_volume,
+                    unit_weight,
+                    remaining,
+                )
             shortages.append(
                 CapacityShortage(
                     product_id=product_id,
